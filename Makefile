@@ -3,8 +3,8 @@ CXX      ?= clang++
 CXXFLAGS ?= -Wall -fpermissive
 
 example:
-	@$(CXX) -xc++ -std=c++17 -Wall -fpermissive -Iinclude ${CXXFLAGS} -o ${BUILD} example/Mistake -lstdc++fs
-	@${BUILD}
+	@$(CXX) -g3 -xc++ -std=c++17 -Wall -fpermissive -Iinclude ${CXXFLAGS} -o ${BUILD} example/Mistake -lstdc++fs
+	@gdb ${BUILD}
 	@rm -f ${BUILD}
 
 .PHONY: example
