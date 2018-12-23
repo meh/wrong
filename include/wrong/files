@@ -1,0 +1,139 @@
+#pragma once
+
+#include <glob.h>
+#include <vector>
+#include <filesystem>
+#include <functional>
+
+using directory_iterator = std::filesystem::recursive_directory_iterator;
+
+namespace wrong {
+
+class files
+{
+public:
+	class matcher
+	{
+	public:
+		using predicate = std::function<bool(std::filesystem::path&)>;
+
+	public:
+		matcher (std::string pred)
+			: _predicate([pred](auto& path) {
+				return true;
+			})
+		{ }
+
+		matcher (predicate pred)
+			: _predicate(pred)
+		{ }
+
+	private:
+		predicate _predicate;
+	};
+
+	class iterator
+	{
+	public:
+		using value_type = directory_iterator::value_type;
+		using difference_type = directory_iterator::difference_type;
+		using pointer = directory_iterator::pointer;
+		using reference = directory_iterator::reference;
+		using iterator_category = directory_iterator::iterator_category;
+
+	public:
+		iterator (directory_iterator inner, std::vector<matcher> const& include, std::vector<matcher> const& exclude)
+			: _inner(inner), _include(include), _exclude(exclude)
+		{ }
+
+    value_type
+		operator * () const
+		{
+			return *_inner;
+		}
+
+    bool
+		operator == (iterator const& other) const
+		{
+			return _inner == other._inner;
+		}
+
+    bool
+		operator != (iterator const& other) const
+		{
+			return !(*this == other);
+		}
+
+	private:
+		directory_iterator          _inner;
+		std::vector<matcher> const& _include;
+		std::vector<matcher> const& _exclude;
+	};
+
+public:
+	files ()
+	{ }
+
+	files (std::initializer_list<std::string> args)
+	{
+		include(args);
+	}
+
+	files (std::initializer_list<matcher> args)
+	{
+		include(args);
+	}
+
+public:
+	files&
+	include (std::initializer_list<matcher> args)
+	{
+		for (auto arg : args) {
+			_include.push_back(arg);
+		}
+
+		return *this;
+	}
+
+	files&
+	include (std::initializer_list<std::string> args)
+	{
+		for (auto arg : args) {
+			_include.push_back(arg);
+		}
+
+		return *this;
+	}
+
+	files&
+	exclude (std::initializer_list<matcher> args)
+	{
+		for (auto arg : args) {
+			_exclude.push_back(arg);
+		}
+
+		return *this;
+	}
+
+	files&
+	exclude (std::initializer_list<std::string> args)
+	{
+		for (auto arg : args) {
+			_exclude.push_back(arg);
+		}
+
+		return *this;
+	}
+
+	iterator
+	iterator (std::filesystem::path& path)
+	{
+		return { directory_iterator(path), _include, _exclude };
+	}
+
+private:
+	std::vector<matcher> _include;
+	std::vector<matcher> _exclude;
+};
+
+}

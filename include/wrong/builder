@@ -1,0 +1,46 @@
+#pragma once
+
+#include <filesystem>
+#include <wrong/files>
+
+namespace wrong { namespace builder {
+
+class base
+{
+public:
+	virtual ~base () { }
+	virtual int build (std::filesystem::path path) = 0;
+};
+
+class dummy final : public virtual base
+{
+public:
+	int
+	build (std::filesystem::path path)
+	{
+		return 0;
+	}
+};
+
+class manual final : public virtual base
+{
+public:
+	int
+	build (std::filesystem::path path)
+	{
+		return 0;
+	}
+
+public:
+	manual&
+	files (class files paths)
+	{
+		_files = paths;
+		return *this;
+	}
+
+private:
+	class files _files;
+};
+
+} }

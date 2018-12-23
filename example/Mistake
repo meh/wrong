@@ -1,0 +1,31 @@
+#include <wrong/wrong>
+#include <wrong/files>
+
+using namespace wrong;
+
+int
+main ()
+{
+	// Define a build.
+	mistake my;
+
+	// A dependency named `foo`, which will be remotely fetched from the given
+	// URL.
+	//
+	// The dependency resides within the `example/foo` folder in the given
+	// remote.
+	my.dependency("foo")
+		.remote<remote::git>([](auto& _, auto& git) {
+			git.url("https://github.com/meh/wrong");
+		})
+		.builder<builder::manual>([](auto& _, auto& build) {
+			build.files({ "source/*.cpp" });
+		})
+		.path("example/foo");
+
+	// A local dependency named `bar` residing at `example/path`.
+	my.dependency("bar")
+		.path("example/bar");
+
+	return my.build();
+}

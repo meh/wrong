@@ -1,0 +1,117 @@
+#pragma once
+
+#include <functional>
+#include <string>
+#include <filesystem>
+
+#include <wrong/remote>
+#include <wrong/builder>
+
+namespace wrong {
+
+template <typename Remote = remote::base, typename Builder = builder::base>
+class dependency final
+{
+	template <typename, typename>
+	friend class dependency;
+
+public:
+	/*! Cannot create an empty dependency.
+	 */
+	dependency () = delete;
+
+	/*! Create a new dependency with the given name.
+	 */
+	dependency (std::string name)
+		: _name(name),
+		  _remote(std::make_unique<remote::dummy>()),
+		  _builder(std::make_unique<builder::dummy>())
+	{ }
+
+protected:
+	/*! Specialize the dependency.
+	 */
+	dependency (std::string name, std::unique_ptr<Remote> remote, std::unique_ptr<Builder> builder)
+		: _name(name), _remote(std::move(remote)), _builder(std::move(builder))
+	{ }
+
+public:
+	/*! Set the remote to use for this dependency, automatically creating it.
+	 */
+	template <typename NewRemote, typename... Args>
+	dependency<NewRemote, Builder>
+	remote (Args... args, std::function<void(dependency<Remote, Builder>&, NewRemote&)> setup)
+	{
+		NewRemote remote(std::forward<Args>(args)...);
+		setup(*this, remote);
+
+		return { _name, std::make_unique<NewRemote>(remote), std::move(_builder) };
+	}
+
+	/*! Set the remote to use for this dependency.
+	 */
+	template <typename NewRemote, typename... Args>
+	dependency<NewRemote, Builder>
+	remote (NewRemote remote)
+	{
+		return { _name, std::make_unique(remote), std::move(_builder) };
+	}
+
+	/*! Set the builder to use for this dependency, automatically creating it.
+	 */
+	template <typename NewBuilder, typename... Args>
+	dependency<Remote, NewBuilder>
+	builder (Args... args, std::function<void(dependency<Remote, Builder>&, NewBuilder&)> setup)
+	{
+		NewBuilder builder(std::forward<Args>(args)...);
+		setup(*this, builder);
+
+		return { _name, std::move(_remote), std::make_unique<NewBuilder>(builder) };
+	}
+
+	/*! Set the builder to use for this dependency.
+	 */
+	template <typename NewBuilder, typename... Args>
+	dependency<NewBuilder, Builder>
+	builder (NewBuilder builder)
+	{
+		return { _name, std::move(_remote), std::make_unique(builder) };
+	}
+
+	/* Define the dependency as a path dependency.
+	 */
+	dependency<Remote, Builder>&
+	path (std::filesystem::path path)
+	{
+		return *this;
+	}
+
+	int
+	build ()
+	{
+		if (auto result = _remote->fetch(); result != 0) {
+			return result;
+		}
+
+		if (auto result = _builder->build(_remote->path()); result != 0) {
+			return result;
+		}
+
+		return 0;
+	}
+
+private:
+	/* The name of the dependency.
+	 */
+	std::string _name;
+
+	/* The internal remote handler.
+	 */
+	std::unique_ptr<Remote> _remote;
+
+	/* The internal builder handler.
+	 */
+	std::unique_ptr<Builder> _builder;
+};
+
+}
