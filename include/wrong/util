@@ -19,8 +19,8 @@ struct process
 
 process
 shell (std::string cmd) {
-	std::array<char, 128> buffer;
-	std::string stdout;
+	std::array<char, 129> buffer;
+	std::ostringstream stdout;
 	std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd.c_str(), "r"), pclose);
 
 	if (!pipe) {
@@ -32,13 +32,13 @@ shell (std::string cmd) {
 	do {
 		std::fill_n(buffer.data(), buffer.size(), 0);
 		consumed = std::fread(buffer.data(), 1, buffer.size() - 1, pipe.get());
-		stdout += buffer.data();
-	} while (consumed == buffer.size());
+		stdout << buffer.data();
+	} while (consumed == buffer.size() - 1);
 
 	// Wait for the process to exit and save the status code.
 	auto status = WEXITSTATUS(pclose(pipe.get()));
 
-	return { .stdout = stdout, .status = status };
+	return { .stdout = stdout.str(), .status = status };
 }
 
 process
