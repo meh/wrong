@@ -13,7 +13,7 @@ public:
 	mistake ()
 	{ }
 
-	class dependency<>&
+	class dependency&
 	dependency (std::string name)
 	{
 		if (auto it = _dependencies.find(name); it != _dependencies.end()) {
@@ -37,7 +37,7 @@ public:
 	}
 
 private:
-	std::unordered_map<std::string, wrong::dependency<>> _dependencies;
+	std::unordered_map<std::string, wrong::dependency> _dependencies;
 };
 
 }

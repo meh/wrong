@@ -1,0 +1,46 @@
+#pragma once
+
+#include <string>
+
+#include <wrong/util>
+#include <wrong/flags>
+
+namespace wrong {
+
+class package final
+{
+public:
+	package&
+	name (std::string value)
+	{
+		_name = value;
+		return *this;
+	}
+
+	int
+	apply (flags& flags) const
+	{
+		auto ldflags = util::shell([this](auto& cmd) {
+			cmd << "pkg-config \"" << _name << "\" --libs";
+		});
+
+		if (ldflags.status != 0) {
+			return ldflags.status;
+		}
+
+		auto cflags = util::shell([this](auto& cmd) {
+			cmd << "pkg-config \"" << _name << "\" --cflags";
+		});
+
+		if (cflags.status != 0) {
+			return cflags.status;
+		}
+
+		return 0;
+	}
+
+private:
+	std::string _name;
+};
+
+}

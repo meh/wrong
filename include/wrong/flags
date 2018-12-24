@@ -1,0 +1,59 @@
+#pragma once
+
+#include <vector>
+#include <string>
+#include <iostream>
+
+namespace wrong {
+
+class flags final
+{
+public:
+	/*! Get the flags for the C compiler.
+	 */
+	std::vector<std::string> const&
+	c () const
+	{
+		return _c;
+	}
+
+	flags&
+	c (std::vector<std::string> value)
+	{
+		_c = value;
+		return *this;
+	}
+
+	std::vector<std::string> const&
+	cxx () const
+	{
+		return _cxx;
+	}
+
+	flags&
+	cxx (std::vector<std::string> value)
+	{
+		_cxx = value;
+		return *this;
+	}
+
+	std::vector<std::string> const&
+	ld () const
+	{
+		return _ld;
+	}
+
+	flags&
+	ld (std::vector<std::string> value)
+	{
+		_ld = value;
+		return *this;
+	}
+
+private:
+	std::vector<std::string> _c;
+	std::vector<std::string> _cxx;
+	std::vector<std::string> _ld;
+};
+
+}

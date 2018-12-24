@@ -2,6 +2,7 @@
 
 #include <string>
 #include <filesystem>
+#include <iostream>
 
 namespace wrong { namespace remote {
 
@@ -9,11 +10,19 @@ class base
 {
 public:
 	virtual ~base () { }
+
+	/*! The absolute path to the fetched remote.
+	 */
 	virtual std::filesystem::path path () const = 0;
+
+	/*! Fetch the remote.
+	 */
 	virtual int fetch () = 0;
 };
 
-class dummy final : public virtual base
+/*! Nothing to fetch.
+ */
+class none final : public virtual base
 {
 public:
 	std::filesystem::path
@@ -30,7 +39,20 @@ public:
 };
 
 class http final : public virtual base
-{ };
+{
+public:
+	std::filesystem::path
+	path () const
+	{
+		return "";
+	}
+
+	int
+	fetch ()
+	{
+		return 0;
+	}
+};
 
 class git final : public virtual base
 {
@@ -48,23 +70,19 @@ public:
 	}
 
 public:
+	/*! Define the remote URL for the repository.
+	 */
 	git&
 	url (std::string url)
 	{
 		_url = url;
-
 		return *this;
 	}
 
 private:
+	/*! The URL to the remote repository.
+	 */
 	std::string _url;
 };
-
-class hg final : public virtual base
-{ };
-
-class svn final : public virtual base
-{ };
-
 
 } }

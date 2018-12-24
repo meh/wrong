@@ -1,0 +1,52 @@
+#pragma once
+
+#include <cstdio>
+#include <iostream>
+#include <memory>
+#include <stdexcept>
+#include <string>
+#include <array>
+#include <functional>
+#include <sstream>
+
+namespace wrong { namespace util {
+
+struct process
+{
+	std::string stdout;
+	int status;
+};
+
+process
+shell (std::string cmd) {
+	std::array<char, 128> buffer;
+	std::string stdout;
+	std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd.c_str(), "r"), pclose);
+
+	if (!pipe) {
+		throw std::runtime_error("popen() failed!");
+	}
+
+	// Read as much output as possible.
+	size_t consumed = 0;
+	do {
+		std::fill_n(buffer.data(), buffer.size(), 0);
+		consumed = std::fread(buffer.data(), 1, buffer.size() - 1, pipe.get());
+		stdout += buffer.data();
+	} while (consumed == buffer.size());
+
+	// Wait for the process to exit and save the status code.
+	auto status = WEXITSTATUS(pclose(pipe.get()));
+
+	return { .stdout = stdout, .status = status };
+}
+
+process
+shell (std::function<void(std::ostream&)> cmd) {
+	std::ostringstream out;
+	cmd(out);
+	return shell(out.str());
+}
+
+
+} }

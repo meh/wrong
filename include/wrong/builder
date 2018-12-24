@@ -1,7 +1,10 @@
 #pragma once
 
 #include <filesystem>
+#include <iostream>
+
 #include <wrong/files>
+#include <wrong/flags>
 
 namespace wrong { namespace builder {
 
@@ -12,7 +15,7 @@ public:
 	virtual int build (std::filesystem::path path) = 0;
 };
 
-class dummy final : public virtual base
+class none final : public virtual base
 {
 public:
 	int

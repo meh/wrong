@@ -15,17 +15,21 @@ main ()
 	// The dependency resides within the `example/foo` folder in the given
 	// remote.
 	my.dependency("foo")
-		.remote<remote::git>([](auto& _, auto& git) {
+		.remote<remote::git>([](auto& git) {
 			git.url("https://github.com/meh/wrong");
 		})
-		.builder<builder::manual>([](auto& _, auto& build) {
+		.builder<builder::manual>([](auto& build) {
 			build.files({ "source/*.cpp" });
 		})
-		.path("example/foo");
+		 .path("example/foo");
 
 	// A local dependency named `bar` residing at `example/path`.
 	my.dependency("bar")
 		.path("example/bar");
+
+	// A local dependency using pkg-config.
+	my.dependency("cairo")
+		.package();
 
 	return my.build();
 }

@@ -46,19 +46,19 @@ public:
 			: _inner(inner), _include(include), _exclude(exclude)
 		{ }
 
-    value_type
+		value_type
 		operator * () const
 		{
 			return *_inner;
 		}
 
-    bool
+		bool
 		operator == (iterator const& other) const
 		{
 			return _inner == other._inner;
 		}
 
-    bool
+		bool
 		operator != (iterator const& other) const
 		{
 			return !(*this == other);
