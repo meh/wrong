@@ -17,19 +17,47 @@ public:
 		return *this;
 	}
 
+	package&
+	statically (bool value)
+	{
+		_static = value;
+		return *this;
+	}
+
+	package&
+	at_least_version (std::string value)
+	{
+		_version = value;
+		return *this;
+	}
+
 	int
 	apply (flags& flags) const
 	{
-		auto ldflags = util::shell([this](auto& cmd) {
-			cmd << "pkg-config \"" << _name << "\" --libs";
+		auto common = [this](auto& cmd) -> auto& {
+			cmd << "pkg-config \"" << _name << "\"";
+
+			if (_static) {
+				cmd << " --static";
+			}
+
+			if (_version) {
+				cmd << " --atleast-version " << _version.value();
+			}
+
+			return cmd;
+		};
+
+		auto ldflags = util::shell([=](auto& cmd) {
+			common(cmd) << " --libs";
 		});
 
 		if (ldflags.status != 0) {
 			return ldflags.status;
 		}
 
-		auto cflags = util::shell([this](auto& cmd) {
-			cmd << "pkg-config \"" << _name << "\" --cflags";
+		auto cflags = util::shell([=](auto& cmd) {
+			common(cmd) << " --cflags";
 		});
 
 		if (cflags.status != 0) {
@@ -41,6 +69,8 @@ public:
 
 private:
 	std::string _name;
+	bool _static = false;
+	std::optional<std::string> _version;
 };
 
 }
