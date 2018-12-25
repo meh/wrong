@@ -11,8 +11,8 @@ class flags final
 public:
 	/*! Get the flags for the C compiler.
 	 */
-	std::vector<std::string> const&
-	c () const
+	std::vector<std::string>&
+	c ()
 	{
 		return _c;
 	}
@@ -24,8 +24,8 @@ public:
 		return *this;
 	}
 
-	std::vector<std::string> const&
-	cxx () const
+	std::vector<std::string>&
+	cxx ()
 	{
 		return _cxx;
 	}
@@ -37,8 +37,8 @@ public:
 		return *this;
 	}
 
-	std::vector<std::string> const&
-	ld () const
+	std::vector<std::string>&
+	ld ()
 	{
 		return _ld;
 	}

@@ -10,6 +10,8 @@ namespace wrong {
 class package final
 {
 public:
+	/*! Define the package name.
+	 */
 	package&
 	name (std::string value)
 	{
@@ -17,6 +19,8 @@ public:
 		return *this;
 	}
 
+	/*! Define the dependency as static.
+	 */
 	package&
 	statically (bool value)
 	{
@@ -24,6 +28,8 @@ public:
 		return *this;
 	}
 
+	/*! Specify a minimum version for the package.
+	 */
 	package&
 	at_least_version (std::string value)
 	{
@@ -31,6 +37,8 @@ public:
 		return *this;
 	}
 
+	/*! Apply the pkg-config settings to the given `flags`.
+	 */
 	int
 	apply (flags& flags) const
 	{
@@ -63,6 +71,13 @@ public:
 		if (cflags.status != 0) {
 			return cflags.status;
 		}
+
+		util::trim(ldflags.stdout);
+		util::trim(cflags.stdout);
+
+		flags.c().push_back(cflags.stdout);
+		flags.cxx().push_back(cflags.stdout);
+		flags.ld().push_back(ldflags.stdout);
 
 		return 0;
 	}

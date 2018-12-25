@@ -17,6 +17,7 @@ struct process
 	int status;
 };
 
+static inline
 process
 shell (std::string cmd) {
 	std::array<char, 129> buffer;
@@ -41,6 +42,7 @@ shell (std::string cmd) {
 	return { .stdout = stdout.str(), .status = status };
 }
 
+static inline
 process
 shell (std::function<void(std::ostream&)> cmd) {
 	std::ostringstream out;
@@ -48,5 +50,36 @@ shell (std::function<void(std::ostream&)> cmd) {
 	return shell(out.str());
 }
 
+/*! Trim from the start (in place).
+ */
+static inline
+void
+ltrim (std::string& s)
+{
+	s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](int ch) {
+		return !std::isspace(ch);
+	}));
+}
+
+/*! Trim from the end (in place).
+ */
+static inline
+void
+rtrim(std::string& s)
+{
+	s.erase(std::find_if(s.rbegin(), s.rend(), [](int ch) {
+		return !std::isspace(ch);
+	}).base(), s.end());
+}
+
+/*! Trim (in place).
+ */
+static inline
+void
+trim (std::string& s)
+{
+	ltrim(s);
+	rtrim(s);
+}
 
 } }
