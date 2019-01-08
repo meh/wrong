@@ -1,31 +1,13 @@
 #pragma once
 
-#include <filesystem>
-#include <iostream>
+#include <wrong/builder/base>
 
 #include <wrong/files>
 #include <wrong/flags>
 
 namespace wrong { namespace builder {
 
-class base
-{
-public:
-	virtual ~base () { }
-	virtual int build (std::filesystem::path path) = 0;
-};
-
-class none final : public virtual base
-{
-public:
-	int
-	build (std::filesystem::path path)
-	{
-		return 0;
-	}
-};
-
-class manual final : public virtual base
+class compile final : public virtual base
 {
 public:
 	int
@@ -34,12 +16,24 @@ public:
 		return 0;
 	}
 
+	int
+	use (std::filesystem::path path, flags& flags)
+	{
+		return 0;
+	}
+
 public:
-	manual&
+	compile&
 	files (class files paths)
 	{
 		_files = paths;
 		return *this;
+	}
+
+	class files&
+	files ()
+	{
+		return _files;
 	}
 
 private:

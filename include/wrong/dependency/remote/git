@@ -1,0 +1,37 @@
+#pragma once
+
+#include <wrong/dependency/remote/base>
+
+namespace wrong { namespace dependency { namespace remote {
+
+template <typename Builder = void>
+class git : public virtual base<git<Builder>, Builder>
+{
+public:
+	using base<git>::base;
+
+	std::filesystem::path
+	path () const
+	{
+		return "";
+	}
+
+	int
+	fetch ()
+	{
+		return 0;
+	}
+
+public:
+	git&
+	remote (std::string url)
+	{
+		_remote = url;
+		return *this;
+	}
+
+private:
+	std::string _remote;
+};
+
+} } }

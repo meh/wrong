@@ -1,0 +1,10 @@
+#pragma once
+
+namespace wrong {
+
+class library
+{
+
+};
+
+}

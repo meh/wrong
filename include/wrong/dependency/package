@@ -1,46 +1,23 @@
 #pragma once
 
-#include <string>
-
 #include <wrong/util>
-#include <wrong/flags>
 
-namespace wrong {
+#include <wrong/dependency/base>
 
-class package final
+namespace wrong { namespace dependency {
+
+class package : public virtual base
 {
 public:
-	/*! Define the package name.
+	/*! Create a new system dependency with the given name.
 	 */
-	package&
-	name (std::string value)
-	{
-		_name = value;
-		return *this;
-	}
+	package (std::string name)
+		: base(name)
+	{ }
 
-	/*! Define the dependency as static.
-	 */
-	package&
-	statically (bool value)
-	{
-		_static = value;
-		return *this;
-	}
-
-	/*! Specify a minimum version for the package.
-	 */
-	package&
-	at_least_version (std::string value)
-	{
-		_version = value;
-		return *this;
-	}
-
-	/*! Apply the pkg-config settings to the given `flags`.
-	 */
+public:
 	int
-	apply (flags& flags) const
+	use (flags& flags)
 	{
 		auto common = [this](auto& cmd) -> auto& {
 			cmd << "pkg-config \"" << _name << "\"";
@@ -82,10 +59,38 @@ public:
 		return 0;
 	}
 
+public:
+	/*! Define the package name.
+	 */
+	package&
+	name (std::string value)
+	{
+		_name = value;
+		return *this;
+	}
+
+	/*! Define the dependency as static.
+	 */
+	package&
+	statically (bool value)
+	{
+		_static = value;
+		return *this;
+	}
+
+	/*! Specify a minimum version for the package.
+	 */
+	package&
+	at_least_version (std::string value)
+	{
+		_version = value;
+		return *this;
+	}
+
 private:
-	std::string _name;
-	bool _static = false;
+	bool _static;
 	std::optional<std::string> _version;
+
 };
 
-}
+} }

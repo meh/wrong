@@ -2,6 +2,12 @@ WRONG
 =====
 Every single build system for C/C++ is wrong, especially this one.
 
+Example
+=======
+```cpp
+
+```
+
 Concepts
 ========
 Why do all build systems suck for me? Let's find out!
@@ -52,8 +58,7 @@ and handle cross-compilation as easily as it handles building for the host.
 This is especially important for embedded, but it's also important for desktops
 and other garbage.
 
-What do you mean with C/C++? Don't you know they're nothing alike?
-------------------------------------------------------------------
-I'm extremely aware saying C/C++ doesn't make sense as C and C++ are two
-completely different programming languages, but in this case it makes sense as
-they share the same build systems and compilation architecture.
+Modifying a dependency must be easy
+-----------------------------------
+Ever needed to change a line in a dependency of a dependency, or add a file, or
+do something before or after building?  Sucks to be you, you can't.

@@ -1,0 +1,43 @@
+#pragma once
+
+#include <filesystem>
+#include <memory>
+#include <optional>
+
+#include <wrong/builder/base>
+#include <wrong/dependency/base>
+
+namespace wrong { namespace dependency {
+
+class local : public virtual base
+{
+public:
+	/*! Create a new system dependency with the given name.
+	 */
+	local (std::string name)
+		: base(name)
+	{ }
+
+public:
+	int
+	use (flags& flags)
+	{
+		return 0;
+	}
+
+public:
+	/*! Define the path to the local dependency.
+	 */
+	local&
+	path (std::filesystem::path value)
+	{
+		_path = value;
+		return *this;
+	}
+
+private:
+	std::filesystem::path _path;
+	std::optional<std::unique_ptr<builder::base>> _builder;
+};
+
+} }

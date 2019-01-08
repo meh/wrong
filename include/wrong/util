@@ -11,6 +11,11 @@
 
 namespace wrong { namespace util {
 
+#define WRONG_TRY(body) \
+	if (int result = (body); result != 0) { \
+		return result; \
+	}
+
 struct process
 {
 	std::string stdout;

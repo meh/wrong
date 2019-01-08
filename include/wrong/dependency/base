@@ -1,0 +1,44 @@
+#pragma once
+
+#include <string>
+#include <string_view>
+
+#include <wrong/flags>
+
+namespace wrong { namespace dependency {
+
+class base
+{
+public:
+	/*! Cannot create an empty dependency.
+	 */
+	base () = delete;
+
+	/*! Create a new dependency with the given name.
+	 */
+	base (std::string name)
+		: _name(name)
+	{ }
+
+public:
+	/*! The name of the dependency.
+	 */
+	std::string_view
+	name () const
+	{
+		return _name;
+	}
+
+public:
+	// Without a virtual destructor the children won't be properly destroyed.
+	virtual ~base () { }
+
+	/*! Use the dependency.
+	 */
+	virtual int use (flags& flags) = 0;
+
+protected:
+	std::string _name;
+};
+
+} }

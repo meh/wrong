@@ -1,5 +1,6 @@
-#include <wrong/wrong>
-#include <wrong/files>
+#include <wrong/build>
+#include <wrong/dependency/remote/git>
+#include <wrong/builder/compile>
 
 using namespace wrong;
 
@@ -7,29 +8,26 @@ int
 main ()
 {
 	// Define a build.
-	mistake my;
+	wrong::build build;
 
 	// A dependency named `foo`, which will be remotely fetched from the given
 	// URL.
 	//
-	// The dependency resides within the `example/foo` folder in the given
+	// The dependency resides within the `example/foo/` folder in the given
 	// remote.
-	my.dependency("foo")
-		.remote<remote::git>([](auto& git) {
-			git.url("https://github.com/meh/wrong");
-		})
-		.builder<builder::manual>([](auto& build) {
-			build.files({ "source/*.cpp" });
-		})
-		 .path("example/foo");
+	build.dependency<builder::compile<dependency::remote::git>>("foo")
+		.remote("https://github.com/meh/wrong")
+		.root("example/foo")
+		.files({ "source/*.cpp" });
 
 	// A local dependency named `bar` residing at `example/path`.
-	my.dependency("bar")
+	build.dependency<dependency::local>("bar")
 		.path("example/bar");
 
 	// A local dependency using pkg-config.
-	my.dependency("cairo")
-		.package();
+	build.dependency<dependency::package>("xcb");
 
-	return my.build();
+	build.program("foo");
+
+	return build.run("foo");
 }
