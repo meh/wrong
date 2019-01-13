@@ -1,0 +1,219 @@
+#pragma once
+
+#include <future>
+#include <optional>
+#include <functional>
+#include <variant>
+#include <vector>
+#include <string>
+#include <filesystem>
+
+#include <cstdio>
+#include <cstdlib>
+
+using namespace std::string_literals;
+
+namespace wrong {
+
+/*! An assets is a file that has no behavior of its own.
+ *
+ * It could be an image, a video, or even source code that needs to be
+ * generated through some pre-processor.
+ */
+class asset
+{
+public:
+	asset () = delete;
+
+	asset (std::filesystem::path path)
+		: _path(path)
+	{ }
+
+	/*! Path to the provided asset.
+	 */
+	std::filesystem::path&
+	path ()
+	{
+		return _path;
+	}
+
+private:
+	std::filesystem::path _path;
+};
+
+/*! A library is either shared, static or header only.
+ */
+class library
+{
+public:
+	library () = delete;
+
+	library (bool is_static, std::optional<std::filesystem::path> path, std::vector<std::filesystem::path> headers)
+		: _is_static(is_static), _path(path), _headers(headers)
+	{ }
+
+	/*! Whether the library is static or shared.
+	 *
+	 * ## Notes
+	 *
+	 * A header only library is considered static.
+	 */
+	bool
+	is_static () const
+	{
+		return _is_static;
+	}
+
+	/*! The path to the library.
+	 *
+	 * ## Notes
+	 *
+	 * If there is no path then it's a header only library.
+	 */
+	std::optional<std::filesystem::path> const&
+	path () const
+	{
+		return _path;
+	}
+
+	/*! A list of headers provided by this library.
+	 */
+	std::vector<std::filesystem::path> const&
+	headers () const
+	{
+		return _headers;
+	}
+
+private:
+	bool _is_static;
+	std::optional<std::filesystem::path> _path;
+	std::vector<std::filesystem::path> _headers;
+};
+
+/*! A program is an executable that can be ran.
+ *
+ * For example a tool that can be used to generate more stuff.
+ */
+class program
+{
+public:
+	/*! Process instance of the program.
+	 *
+	 * TODO(meh): implement std::istream, or something.
+	 */
+	class process
+	{
+	public:
+		process () = delete;
+
+		process (std::string cmd)
+			: _status(0), _pipe(nullptr)
+		{
+			if (auto pipe = popen(cmd.c_str(), "r"); pipe != nullptr) {
+				_pipe = pipe;
+			}
+			else {
+				throw std::runtime_error("popen() failed!");
+			}
+		}
+
+		~process ()
+		{
+			if (_pipe != nullptr) {
+				pclose(_pipe);
+			}
+		}
+
+		/*! Check the status for the process.
+		 *
+		 * ## Note
+		 *
+		 * This blocks until the process has exited, or returns instantly if the
+		 * process has already exited.
+		 */
+		int
+		status ()
+		{
+			if (_pipe != nullptr) {
+				_status = WEXITSTATUS(pclose(_pipe));
+				_pipe   = nullptr;
+			}
+
+			return _status;
+		}
+
+	private:
+		int   _status;
+		FILE* _pipe;
+	};
+
+	/*! Look for a program available in the system.
+	 */
+	static inline
+	std::optional<program>
+	which (std::string_view name)
+	{
+		return {};
+	}
+
+public:
+	program () = delete;
+
+	program (std::filesystem::path path)
+		: _path(path)
+	{ }
+
+	/*! Path to the program.
+	 */
+	std::filesystem::path const&
+	path () const
+	{
+		return _path;
+	}
+
+	/*! Run the program with the given arguments.
+	 */
+	process
+	run (std::initializer_list<std::string> args) const
+	{
+		std::ostringstream cmd(_path);
+
+		for (auto arg : args) {
+			cmd << " " << arg;
+		}
+
+		return cmd.str();
+	}
+
+private:
+	std::filesystem::path _path;
+};
+
+class provision
+{
+public:
+	using type = std::variant<asset, library, program>;
+
+public:
+	template <typename Prepare>
+	provision (std::string name, Prepare steps)
+		: _name(name)
+	{ }
+
+	std::future<type>
+	get_future ()
+	{
+		return _ready.get_future();
+	}
+
+private:
+	/*! The name being provided.
+	 */
+	std::string _name;
+
+	/*! The promise that gets resolved on preparation ready.
+	 */
+	std::promise<type> _ready;
+};
+
+}

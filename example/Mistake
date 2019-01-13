@@ -1,33 +1,28 @@
-#include <wrong/build>
-#include <wrong/dependency/remote/git>
-#include <wrong/builder/compile>
+#include <wrong/mistake>
 
 using namespace wrong;
 
 int
 main ()
 {
-	// Define a build.
-	wrong::build build;
+	mistake my;
 
-	// A dependency named `foo`, which will be remotely fetched from the given
-	// URL.
-	//
-	// The dependency resides within the `example/foo/` folder in the given
-	// remote.
-	build.dependency<builder::compile<dependency::remote::git>>("foo")
-		.remote("https://github.com/meh/wrong")
-		.root("example/foo")
-		.files({ "source/*.cpp" });
+	my.dependency("foo")
+		.place(place::git()
+			.remote("https://github.com/meh/wrong")
+			.root("example/foo"))
+		.provides<program>("foo", prepare::link());
 
-	// A local dependency named `bar` residing at `example/path`.
-	build.dependency<dependency::local>("bar")
-		.path("example/bar");
+	my.dependency("bar")
+		.place(place::local()
+			.path("example/bar"))
+		.provides<library>("bar", prepare::archive());
 
-	// A local dependency using pkg-config.
-	build.dependency<dependency::package>("xcb");
+	my.program("bar")
+		// NOTE(meh): This adds a `prepare<provision>` to a list of required
+		//            provisions, which will then be built, it's essentially
+		//            a future.
+		.requires<program>("foo::foo");
 
-	build.program("foo");
-
-	return build.run("foo");
+	return my.build("foo");
 }

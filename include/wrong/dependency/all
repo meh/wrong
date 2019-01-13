@@ -1,5 +1,0 @@
-#pragma once
-
-#include <wrong/dependency/package>
-#include <wrong/dependency/local>
-#include <wrong/dependency/remote/git>

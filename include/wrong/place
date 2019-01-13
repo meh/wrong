@@ -1,0 +1,178 @@
+#pragma once
+
+#include <optional>
+#include <string>
+#include <filesystem>
+#include <iostream>
+
+namespace wrong { namespace place {
+
+class base
+{
+public:
+	virtual ~base () { }
+
+	/*! The absolute path to the place where things are.
+	 */
+	virtual std::filesystem::path path () const = 0;
+
+	/*! Find the place.
+	 */
+	virtual int find () = 0;
+};
+
+/*! There's actually no place.
+ */
+class none final : public virtual base
+{
+public:
+	struct builder
+	{
+		using place = none;
+	};
+
+public:
+	none ()
+	{ }
+
+	none (builder& build)
+	{ }
+
+public:
+	std::filesystem::path
+	path () const
+	{
+		return "";
+	}
+
+	int
+	find ()
+	{
+		return 0;
+	}
+};
+
+/*! There's actually no place.
+ */
+class local final : public virtual base
+{
+public:
+	struct builder
+	{
+		std::optional<std::filesystem::path> _path;
+
+		/*! Define the local path where the dependency is.
+	 	 */
+		builder&
+		path (std::filesystem::path value)
+		{
+			_path = value;
+			return *this;
+		}
+
+		using place = local;
+	};
+
+public:
+	local (builder& build)
+		: _path(build._path.value())
+	{ }
+
+private:
+	std::filesystem::path _path;
+
+public:
+	std::filesystem::path
+	path () const
+	{
+		return "";
+	}
+
+	int
+	find ()
+	{
+		return 0;
+	}
+};
+
+/*! The place is on git!
+ */
+class git final : public virtual base
+{
+public:
+	struct builder
+	{
+		std::optional<std::string> _remote;
+		std::optional<std::filesystem::path> _root;
+
+		/*! Define the remote URL for the repository.
+	 	 */
+		builder&
+		remote (std::string value)
+		{
+			_remote = value;
+			return *this;
+		}
+
+		/*! Define the root within the repository where the dependency is.
+	 	 */
+		builder&
+		root (std::filesystem::path value)
+		{
+			_root = value;
+			return *this;
+		}
+
+		using place = git;
+	};
+
+public:
+	git (builder& build)
+		: _remote(build._remote.value()), _root(build._root)
+	{ }
+
+private:
+	/*! The URL to the remote repository.
+	 */
+	std::string _remote;
+
+	/*! The URL to the remote repository.
+	 */
+	std::optional<std::filesystem::path> _root;
+
+public:
+	std::filesystem::path
+	path () const
+	{
+		return "";
+	}
+
+	int
+	find ()
+	{
+		return 0;
+	}
+};
+
+static inline
+none::builder
+none ()
+{
+	return {};
+}
+
+static inline
+local::builder
+local ()
+{
+	return {};
+}
+
+static inline
+git::builder
+git ()
+{
+	return {};
+}
+
+} }

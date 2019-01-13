@@ -1,0 +1,56 @@
+#pragma once
+
+#include <future>
+#include <string>
+#include <memory>
+#include <unordered_map>
+
+#include <wrong/place>
+#include <wrong/provision>
+#include <wrong/prepare>
+
+namespace wrong {
+
+class dependency
+{
+public:
+	dependency (std::string name)
+		: _name(name), _place(std::make_unique<class place::none>())
+	{ }
+
+	template <typename Builder>
+	dependency&
+	place (Builder& place)
+	{
+		_place = std::make_unique<typename Builder::place>(place);
+		return *this;
+	}
+
+	template <typename Provision, typename Prepare>
+	dependency&
+	provides (std::string name, Prepare steps)
+	{
+		static_assert(std::is_same<typename Prepare::output, Provision>::value,
+			"The preparation does not return the right type of provision");
+
+		provision provided(name, steps);
+		_provisions.insert({ std::move(name), std::move(provided) });
+
+		return *this;
+	}
+
+private:
+	/*! The name of the dependency.
+	 */
+	std::string _name;
+
+	/*! The place where the dependency is.
+	 */
+	std::unique_ptr<place::base> _place;
+
+	/*! The provisions provided by this dependency.
+	 */
+	std::unordered_map<std::string, provision> _provisions;
+};
+
+}

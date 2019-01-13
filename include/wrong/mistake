@@ -1,0 +1,27 @@
+#pragma once
+
+#include <unordered_map>
+
+#include <wrong/dependency>
+
+namespace wrong {
+
+class mistake
+{
+public:
+	class dependency&
+	dependency (std::string name)
+	{
+		if (auto it = _dependencies.find(name); it != _dependencies.end()) {
+			return it->second;
+		}
+
+		_dependencies.insert({ name, name });
+		return _dependencies.at(name);
+	}
+
+private:
+	std::unordered_map<std::string, class dependency> _dependencies;
+};
+
+}
