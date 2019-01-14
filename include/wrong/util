@@ -1,0 +1,110 @@
+#pragma once
+
+#include <iostream>
+
+#include <streambuf>
+#include <istream>
+#include <cstdio>
+#include <cstdlib>
+#include <array>
+
+namespace wrong
+{
+
+class stdiostream : public std::streambuf
+{
+public:
+	stdiostream (int (*close)(FILE*) = std::fclose)
+		: _close(close)
+	{ }
+
+	stdiostream (FILE* ptr, int (*close)(FILE*) = std::fclose)
+		: _ptr(ptr), _close(close)
+	{ }
+
+	~stdiostream ()
+	{
+		if (_ptr != nullptr) {
+			_close(_ptr);
+		}
+	}
+
+	FILE*
+	file ()
+	{
+		return _ptr;
+	}
+
+	void
+	file (FILE* ptr)
+	{
+		_ptr = ptr;
+	}
+
+protected:
+	int
+	underflow()
+	{
+		if (gptr() == egptr()) {
+			size_t size = std::fread(_buffer.data(), 1, _buffer.size(), _ptr);
+			setg(_buffer.data(), _buffer.data(), _buffer.data() + size);
+		}
+
+		return gptr() == egptr()
+			? std::char_traits<char>::eof()
+			: std::char_traits<char>::to_int_type(*gptr());
+	}
+
+private:
+	std::array<char, 1024> _buffer;
+	FILE* _ptr;
+	int (*_close)(FILE*);
+};
+
+class stdiostream_base
+{
+public:
+	stdiostream_base(int (*close)(FILE*))
+		: _stream(close)
+	{}
+
+	stdiostream_base(FILE* ptr, int (*close)(FILE*))
+		: _stream(ptr, close)
+	{}
+
+public:
+	FILE*
+	file ()
+	{
+		return _stream.file();
+	}
+
+	void
+	file (FILE* ptr)
+	{
+		_stream.file(ptr);
+	}
+
+protected:
+	stdiostream _stream;
+};
+
+class istdiostream
+	: public virtual stdiostream_base
+	, public std::istream
+{
+public:
+	istdiostream(int (*close)(FILE*))
+		: stdiostream_base(close)
+		, std::ios(&this->_stream)
+		, std::istream(&this->_stream)
+	{ }
+
+	istdiostream(FILE* ptr, int (*close)(FILE*))
+		: stdiostream_base(ptr, close)
+		, std::ios(&this->_stream)
+		, std::istream(&this->_stream)
+	{ }
+};
+
+}

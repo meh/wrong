@@ -8,8 +8,7 @@
 #include <string>
 #include <filesystem>
 
-#include <cstdio>
-#include <cstdlib>
+#include <wrong/util>
 
 using namespace std::string_literals;
 
@@ -98,29 +97,20 @@ class program
 {
 public:
 	/*! Process instance of the program.
-	 *
-	 * TODO(meh): implement std::istream, or something.
 	 */
-	class process
+	class process : public std::streambuf
 	{
 	public:
 		process () = delete;
 
 		process (std::string cmd)
-			: _status(0), _pipe(nullptr)
+			: _pipe(pclose)
 		{
 			if (auto pipe = popen(cmd.c_str(), "r"); pipe != nullptr) {
-				_pipe = pipe;
+				_pipe.file(pipe);
 			}
 			else {
 				throw std::runtime_error("popen() failed!");
-			}
-		}
-
-		~process ()
-		{
-			if (_pipe != nullptr) {
-				pclose(_pipe);
 			}
 		}
 
@@ -134,17 +124,25 @@ public:
 		int
 		status ()
 		{
-			if (_pipe != nullptr) {
-				_status = WEXITSTATUS(pclose(_pipe));
-				_pipe   = nullptr;
+			if (_pipe.file() != nullptr) {
+				_status = WEXITSTATUS(pclose(_pipe.file()));
+				_pipe.file(nullptr);
 			}
 
 			return _status;
 		}
 
+		/*! The standard output of the process as a stream.
+		 */
+		istdiostream&
+		stdout ()
+		{
+			return _pipe;
+		}
+
 	private:
-		int   _status;
-		FILE* _pipe;
+		int _status;
+		istdiostream _pipe;
 	};
 
 	/*! Look for a program available in the system.
@@ -153,6 +151,24 @@ public:
 	std::optional<program>
 	which (std::string_view name)
 	{
+		auto path = std::getenv("PATH");
+
+		if (path == nullptr) {
+			return {};
+		}
+
+		std::istringstream input(path);
+		std::string prefix;
+
+		while (std::getline(input, prefix, ':')) {
+			std::filesystem::path executable(prefix);
+			executable /= name;
+
+			if (std::filesystem::is_regular_file(executable)) {
+				return executable;
+			}
+		}
+
 		return {};
 	}
 
@@ -174,9 +190,9 @@ public:
 	/*! Run the program with the given arguments.
 	 */
 	process
-	run (std::initializer_list<std::string> args) const
+	run (std::initializer_list<std::string> args = {}) const
 	{
-		std::ostringstream cmd(_path);
+		std::ostringstream cmd(_path, std::ios_base::ate);
 
 		for (auto arg : args) {
 			cmd << " " << arg;
