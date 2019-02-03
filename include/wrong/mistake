@@ -6,9 +6,13 @@
 
 namespace wrong {
 
+/*! The main entry point for building a project, it all starts with a mistake.
+ */
 class mistake
 {
 public:
+	/*! Get or define a new dependency with the given name.
+	 */
 	class dependency&
 	dependency (std::string name)
 	{

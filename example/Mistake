@@ -1,6 +1,7 @@
 #include <wrong/mistake>
 
 using namespace wrong;
+using namespace wrong::action;
 
 int
 main ()
@@ -11,18 +12,28 @@ main ()
 		.place(place::git()
 			.remote("https://github.com/meh/wrong")
 			.root("example/foo"))
-		.provides<program>("foo", prepare::link());
+		.provides<program>("foo",
+			((sources({ "source/*.cpp" })
+				>> compile().include("include").define("NO_MBEDTLS"))
+			+(sources({ "source/mbedtls/*.c" })
+				>> compile().include("include/mbedtls")))
+			>> executable()
+				.use("bar::bar")
+				.link("m"));
 
 	my.dependency("bar")
 		.place(place::local()
 			.path("example/bar"))
-		.provides<library>("bar", prepare::archive());
+		.provides<library>("bar",
+			   sources({ "library/*.cpp" })
+			>> compile()
+			>> archive());
 
-	my.program("bar")
-		// NOTE(meh): This adds a `prepare<provision>` to a list of required
-		//            provisions, which will then be built, it's essentially
-		//            a future.
-		.requires<program>("foo::foo");
-
-	return my.build("foo");
+//	my.program("bar")
+//		// NOTE(meh): This adds a `prepare<provision>` to a list of required
+//		//            provisions, which will then be built, it's essentially
+//		//            a future.
+//		.requires<program>("foo::foo");
+//
+//	return my.build("foo");
 }

@@ -1,0 +1,433 @@
+#pragma once
+
+#include <wrong/provision>
+#include <wrong/files>
+
+namespace wrong { namespace action {
+
+/*! Traits every action must define.
+ */
+template <typename Self>
+struct traits
+{
+	using input = typename Self::input;
+	using output = typename Self::output;
+};
+
+template <typename Input, typename Output>
+struct base
+{
+	using input = Input;
+	using output = Output;
+
+	virtual Output run (Input input) = 0;
+	virtual ~base () { }
+};
+
+/*! Nothing of value.
+ */
+struct nothing
+{
+	nothing ()
+	{ }
+
+	template <typename Input>
+	nothing (Input _input)
+	{ }
+};
+
+/*! An action that takes nothing and returns nothing.
+ */
+struct none final : public virtual base<nothing, nothing>
+{
+	nothing
+	run (nothing input)
+	{
+		return {};
+	}
+};
+
+/*! An action that takes nothing and produces a list of source files.
+ *
+ * The action is created with a list of matchers to collect sources to compile.
+ */
+struct sources final : public virtual base<nothing, files>
+{
+	sources (files input)
+		: _input(input)
+	{ }
+
+	files
+	run (nothing _)
+	{
+		return _input;
+	}
+
+private:
+	files _input;
+};
+
+/*! An action that takes nothing and produces a list of source files.
+ *
+ * The action is created with a list of matchers to collect objects to link.
+ */
+struct objects final : public virtual base<nothing, files>
+{
+	objects (files input)
+		: _input(input)
+	{ }
+
+	files
+	run (nothing _)
+	{
+		return _input;
+	}
+
+private:
+	files _input;
+};
+/*! An action that takes a list of files (source files) and produces a list of
+ *  files (object files).
+ *
+ * In this step the input files are checked to be up-to-date with the output
+ * files, and compilation is skipped if not needed.
+ */
+class compile final : public virtual base<files, files>
+{
+public:
+	files
+	run (files input)
+	{
+		return input;
+	}
+
+	/*! Add a path to the include paths.
+	 */
+	compile
+	include (std::string value)
+	{
+		_flags.push_back("-I" + value);
+		return *this;
+	}
+
+	/*! Add a definition.
+	 */
+	compile
+	define (std::string name, std::string value)
+	{
+		_flags.push_back("-D" + name + "=" + value);
+		return *this;
+	}
+
+	/*! Enable a definition.
+	 */
+	compile
+	define (std::string name)
+	{
+		_flags.push_back("-D" + name + "=1");
+		return *this;
+	}
+
+	compile
+	standard (std::string name)
+	{
+		_flags.push_back("-std=" + name);
+		return *this;
+	}
+
+private:
+	std::vector<std::string> _flags;
+};
+
+/*! An action that takes a list of files (object files) and produces a program.
+ *
+ * This is the final linking step that produces a valid provision.
+ */
+class executable final : public virtual base<files, program>
+{
+public:
+	program
+	run (files input)
+	{
+		return { "" };
+	}
+
+	/*! Add a path to the library paths.
+	 */
+	executable
+	include (std::string value)
+	{
+		_flags.push_back("-L" + value);
+		return *this;
+	}
+
+	/*! Add a library to be linked.
+	 */
+	executable
+	link (std::string name)
+	{
+		_flags.push_back("-l" + name);
+		return *this;
+	}
+
+	/*! Add a library to be linked.
+	 */
+	executable
+	use (std::string path)
+	{
+		// TODO(meh): actually link it
+		return *this;
+	}
+
+private:
+	std::vector<std::string> _flags;
+};
+
+/*! An action that takes a list of files (object files) and produces a shared
+ *  library.
+ *
+ * This is the final linking step that produces a valid provision.
+ */
+class shared final : public virtual base<files, library>
+{
+public:
+	library
+	run (files input)
+	{
+		return { false, {}, {} };
+	}
+
+	/*! Add a path to the library paths.
+	 */
+	shared
+	include (std::string value)
+	{
+		_flags.push_back("-L" + value);
+		return *this;
+	}
+
+	/*! Add a library to be linked.
+	 */
+	shared
+	link (std::string name)
+	{
+		_flags.push_back("-l" + name);
+		return *this;
+	}
+
+	/*! Add a library to be linked.
+	 */
+	shared
+	use (std::string path)
+	{
+		// TODO(meh): actually link it
+		return *this;
+	}
+
+private:
+	std::vector<std::string> _flags;
+};
+
+/*! An action that takes a list of files (object files) and produces a static
+ *  archive.
+ *
+ * This is the final linking step that produces a valid provision.
+ */
+class archive final : public virtual base<files, library>
+{
+public:
+	library
+	run (files input)
+	{
+		return { true, {}, {} };
+	}
+};
+
+/*! Trick to put an action into a pointer.
+ */
+template <typename Action>
+class identity final
+	: public virtual base<typename traits<Action>::input, typename traits<Action>::output>
+{
+public:
+	identity (Action action)
+		: _action(action)
+	{ }
+
+	typename traits<Action>::output
+	run (typename traits<Action>::input input)
+	{
+		return _action.run(input);
+	}
+
+private:
+	Action _action;
+};
+
+/*! Call the function as an action.
+ *
+ * What this allows is to turn a normal function into an action, making it
+ * usable within the rest of the system.
+ *
+ * ```cpp
+ * // For example, this allows the creation of conditionals.
+ * sources({ "source/?.cpp" })
+ * >> apply<files, files>([](auto sources) {
+ *   // Checks if there's a source file named "d.cpp".
+ *   if (sources.contains("source/d.cpp")) {
+ *      // If so, pretend there is only one source file called "a.cpp".
+ *      return { "source/a.cpp" };
+ *   }
+ *   else {
+ *      return sources;
+ *   }
+ * })
+ * >> compile()
+ * ```
+ */
+template <typename Input, typename Output>
+class function final : public virtual base<Input, Output>
+{
+public:
+	function (std::function<Output(Input)> fun)
+		: _fun(fun)
+	{ }
+
+	Output
+	run (Input input)
+	{
+		return _fun(input);
+	}
+
+private:
+	std::function<Output(Input)> _fun;
+};
+
+/*! Allows composition of two actions.
+ */
+template <typename Left, typename Right>
+class compose final
+	: public virtual base<typename traits<Left>::input, typename traits<Right>::output>
+{
+public:
+	compose (Left left, Right right)
+		: _left(left), _right(right)
+	{ }
+
+	typename traits<Right>::output
+	run (typename traits<Left>::input input)
+	{
+		return _right.run(_left.run(input));
+	}
+
+private:
+	Left _left;
+	Right _right;
+};
+
+template <typename Left, typename Right>
+class accumulate final
+	: public virtual base<typename traits<Left>::input, typename traits<Right>::output>
+{
+	static_assert(std::is_same<typename traits<Left>::input, typename traits<Right>::input>::value,
+		"cannot accumulate actions of different input type");
+
+	static_assert(std::is_same<typename traits<Left>::output, typename traits<Right>::output>::value,
+		"cannot accumulate actions of different output type");
+
+public:
+	accumulate (Left left, Right right)
+		: _left(left), _right(right)
+	{ }
+
+	typename traits<Left>::output
+	run (typename traits<Left>::input input)
+	{
+		auto left  = _left.run(input);
+		auto right = _right.run(input);
+
+		return left + right;
+	}
+
+private:
+	Left  _left;
+	Right _right;
+};
+
+/*! Helper to compose actions.
+ */
+template <typename Left, typename Right>
+compose<Left, Right>
+operator>> (Left left, Right right)
+{
+	return { left, right };
+}
+
+template <typename Left, typename Right>
+accumulate<Left, Right>
+operator+ (Left left, Right right)
+{
+	return { left, right };
+}
+
+/*! Helper to create an std::unique_ptr out of any action.
+ */
+template <typename Action>
+std::unique_ptr<action::base<typename traits<Action>::input, typename traits<Action>::output>>
+as_ptr (Action action)
+{
+	return std::make_unique<identity<Action>>(action);
+}
+
+/*! Create an action out of any function.
+ */
+template <typename Input, typename Output>
+function<Input, Output>
+then (std::function<Output(Input)> fun)
+{
+	return { fun };
+}
+
+struct none
+none ()
+{
+	return {};
+}
+
+struct sources
+sources (files input)
+{
+	return input;
+}
+
+struct objects
+objects (files input)
+{
+	return input;
+}
+
+class compile
+compile ()
+{
+	return {};
+}
+
+class executable
+executable ()
+{
+	return {};
+}
+
+class shared
+shared ()
+{
+	return {};
+}
+
+class archive
+archive ()
+{
+	return {};
+}
+
+} }

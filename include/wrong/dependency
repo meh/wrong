@@ -7,17 +7,74 @@
 
 #include <wrong/place>
 #include <wrong/provision>
-#include <wrong/prepare>
+#include <wrong/action>
 
 namespace wrong {
 
+/*! A dependency which provides provisions.
+ */
 class dependency
 {
+public:
+	/*! A provision that can be built.
+	 */
+	class provision
+	{
+	public:
+		using type = std::variant<asset, library, program>;
+
+	public:
+		template <typename Action>
+		provision (std::string name, Action action)
+			: _name(name)
+		{
+			struct variant : public action::base<typename action::traits<Action>::output, type>
+			{
+				type
+				run (typename action::traits<Action>::output output)
+				{
+					return output;
+				}
+			};
+
+			_action = action::as_ptr(action >> variant());
+		}
+
+		/*! Get the name of the provision.
+		 */
+		std::string_view
+		name () const
+		{
+			return _name;
+		}
+
+		/*! Get a future that will resolve to the built provision.
+		 */
+		std::future<type>
+		get_future ()
+		{
+			return std::async(std::launch::async, [this]() {
+				return _action->run(action::nothing());
+			});
+		}
+
+	private:
+		/*! The name being provided.
+		 */
+		std::string _name;
+
+		/*! The action to build the provision.
+		 */
+		std::unique_ptr<action::base<action::nothing, type>> _action;
+	};
+
 public:
 	dependency (std::string name)
 		: _name(name), _place(std::make_unique<class place::none>())
 	{ }
 
+	/*! Define where the dependency can be found.
+	 */
 	template <typename Builder>
 	dependency&
 	place (Builder& place)
@@ -26,17 +83,25 @@ public:
 		return *this;
 	}
 
-	template <typename Provision, typename Prepare>
+	/*! Define a provision that the dependency provides.
+	 */
+	template <typename Provision, typename Action>
 	dependency&
-	provides (std::string name, Prepare steps)
+	provides (std::string name, Action action)
 	{
-		static_assert(std::is_same<typename Prepare::output, Provision>::value,
-			"The preparation does not return the right type of provision");
+		static_assert(std::is_same<typename action::traits<Action>::output, Provision>::value,
+			"The action does not return the right type of provision");
 
-		provision provided(name, steps);
+		provision provided(name, action);
 		_provisions.insert({ std::move(name), std::move(provided) });
 
 		return *this;
+	}
+
+	provision&
+	provided (std::string name)
+	{
+		return _provisions.at(name);
 	}
 
 private:

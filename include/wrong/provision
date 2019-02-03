@@ -205,31 +205,4 @@ private:
 	std::filesystem::path _path;
 };
 
-class provision
-{
-public:
-	using type = std::variant<asset, library, program>;
-
-public:
-	template <typename Prepare>
-	provision (std::string name, Prepare steps)
-		: _name(name)
-	{ }
-
-	std::future<type>
-	get_future ()
-	{
-		return _ready.get_future();
-	}
-
-private:
-	/*! The name being provided.
-	 */
-	std::string _name;
-
-	/*! The promise that gets resolved on preparation ready.
-	 */
-	std::promise<type> _ready;
-};
-
 }

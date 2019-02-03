@@ -11,6 +11,8 @@
 namespace wrong
 {
 
+/*! Wrapper for a C stdio stream to a C++ stream.
+ */
 class stdiostream : public std::streambuf
 {
 public:
@@ -29,12 +31,16 @@ public:
 		}
 	}
 
+	/*! Get the stream being wrapped.
+	 */
 	FILE*
 	file ()
 	{
 		return _ptr;
 	}
 
+	/*! Set the stream being wrapped.
+	 */
 	void
 	file (FILE* ptr)
 	{
