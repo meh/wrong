@@ -14,19 +14,17 @@ main ()
 			.root("example/foo"))
 		.provides<program>("foo",
 			((sources({ "source/*.cpp" })
-				>> compile().include("include").define("NO_MBEDTLS"))
-			+(sources({ "source/mbedtls/*.c" })
-				>> compile().include("include/mbedtls")))
-			>> executable()
-				.use("bar::bar")
-				.link("m"));
+				>> compile().include("include").define("BLA_BLA"))
+			+(sources({ "source/bla/*.c" })
+				>> compile().include("include/bla")))
+			>> executable().use("bar::bar").link("m"));
 
 	my.dependency("bar")
 		.place(place::local()
 			.path("example/bar"))
 		.provides<library>("bar",
-			   sources({ "library/*.cpp" })
-			>> compile()
+			   sources({ "source/*.cpp" })
+			>> compile().include("include/bar")
 			>> archive());
 
 //	my.program("bar")
