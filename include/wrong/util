@@ -8,8 +8,15 @@
 #include <cstdlib>
 #include <array>
 
-namespace wrong
-{
+namespace wrong {
+
+template<bool...> struct bool_pack;
+
+template<bool... bs>
+using is_all_true = std::is_same<bool_pack<bs..., true>, bool_pack<true, bs...>>;
+
+template <size_t N, typename... Ts>
+using nth = typename std::tuple_element<N, std::tuple<Ts...>>::type;
 
 /*! Wrapper for a C stdio stream to a C++ stream.
  */

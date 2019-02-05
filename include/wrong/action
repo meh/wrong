@@ -1,5 +1,10 @@
 #pragma once
 
+#include <functional>
+#include <algorithm>
+#include <array>
+#include <numeric>
+
 #include <wrong/provision>
 #include <wrong/files>
 
@@ -303,64 +308,171 @@ private:
 	std::function<Output(Input)> _fun;
 };
 
-/*! Allows composition of two actions.
+/*! Allows composition of actions.
  */
-template <typename Left, typename Right>
+template <typename Head, typename... Tail>
 class compose final
-	: public virtual base<typename traits<Left>::input, typename traits<Right>::output>
+	: public virtual base<typename traits<Head>::input, typename traits<nth<sizeof...(Tail) - 1, Tail...>>::output>
 {
+	static_assert(sizeof...(Tail) >= 1, "unary compose makes no sense");
+
 public:
-	compose (Left left, Right right)
-		: _left(left), _right(right)
+	compose (Head head, Tail... tail)
+		: _actions({ head, tail... })
 	{ }
 
-	typename traits<Right>::output
-	run (typename traits<Left>::input input)
+	typename traits<nth<sizeof...(Tail) - 1, Tail...>>::output
+	run (typename traits<Head>::input input)
 	{
-		return _right.run(_left.run(input));
+		return multiply<typename traits<nth<sizeof...(Tail) - 1, Tail...>>::output,
+			0, Head, Tail...>(input);
+	}
+
+	std::tuple<Head, Tail...>
+	actions ()
+	{
+		return _actions;
 	}
 
 private:
-	Left _left;
-	Right _right;
+	template <typename Output, size_t I, typename First>
+	Output
+	multiply (typename traits<First>::input input)
+	{
+		return std::get<I>(_actions).run(input);
+	}
+
+	template <typename Output, size_t I, typename First, typename Second, typename... Rest>
+	Output
+	multiply (typename traits<First>::input input)
+	{
+		return multiply<Output, I + 1, Second, Rest...>(std::get<I>(_actions).run(input));
+	}
+
+private:
+	std::tuple<Head, Tail...> _actions;
 };
 
-template <typename Left, typename Right>
+template <typename Head, typename... Tail>
 class accumulate final
-	: public virtual base<typename traits<Left>::input, typename traits<Right>::output>
+	: public virtual base<typename traits<Head>::input, typename traits<Head>::output>
 {
-	static_assert(std::is_same<typename traits<Left>::input, typename traits<Right>::input>::value,
+	static_assert(sizeof...(Tail) >= 1, "unary accumulate makes no sense");
+
+	static_assert(is_all_true<std::is_same<typename traits<Head>::input, typename traits<Tail>::input>::value...>::value,
 		"cannot accumulate actions of different input type");
 
-	static_assert(std::is_same<typename traits<Left>::output, typename traits<Right>::output>::value,
+	static_assert(is_all_true<std::is_same<typename traits<Head>::output, typename traits<Tail>::output>::value...>::value,
 		"cannot accumulate actions of different output type");
 
 public:
-	accumulate (Left left, Right right)
-		: _left(left), _right(right)
+	accumulate (Head head, Tail... tail)
+		: _actions({ head, tail... })
 	{ }
 
-	typename traits<Left>::output
-	run (typename traits<Left>::input input)
+	typename traits<Head>::output
+	run (typename traits<Head>::input input)
 	{
-		auto left  = _left.run(input);
-		auto right = _right.run(input);
+		return sum(input, std::index_sequence_for<Tail...>{});
+	}
 
-		return left + right;
+	std::tuple<Head, Tail...>
+	actions ()
+	{
+		return _actions;
 	}
 
 private:
-	Left  _left;
-	Right _right;
+	template <size_t... I>
+	typename traits<Head>::output
+	sum (typename traits<Head>::input input, std::index_sequence<I...>)
+	{
+		return std::get<0>(_actions).run(input) + (std::get<I>(_actions).run(input) + ...);
+	}
+
+private:
+	std::tuple<Head, Tail...> _actions;
 };
 
 /*! Helper to compose actions.
  */
+template <typename LeftHead, typename... LeftTail, size_t... LeftIndices, typename RightHead, typename... RightTail, size_t... RightIndices>
+compose<LeftHead, LeftTail..., RightHead, RightTail...>
+make_compose (std::tuple<LeftHead, LeftTail...> left, std::tuple<RightHead, RightTail...> right, std::index_sequence<LeftIndices...>, std::index_sequence<RightIndices...>)
+{
+	return { std::get<LeftIndices>(left)..., std::get<RightIndices>(right)... };
+}
+
+template <typename LeftHead, typename... LeftTail, typename LeftIndices = std::make_index_sequence<1 + sizeof...(LeftTail)>, typename RightHead, typename... RightTail, typename RightIndices = std::make_index_sequence<1 + sizeof...(RightTail)>>
+compose<LeftHead, LeftTail..., RightHead, RightTail...>
+make_compose (std::tuple<LeftHead, LeftTail...> left, std::tuple<RightHead, RightTail...> right)
+{
+	return make_compose(left, right, LeftIndices{}, RightIndices{});
+}
+
+template <typename LeftHead, typename... LeftTail, typename RightHead, typename... RightTail>
+compose<LeftHead, LeftTail..., RightHead, RightTail...>
+operator>> (compose<LeftHead, LeftTail...> left, compose<RightHead, RightTail...> right)
+{
+	return make_compose(left.actions(), right.actions());
+}
+
+template <typename LeftHead, typename... LeftTail, typename Right>
+compose<LeftHead, LeftTail..., Right>
+operator>> (compose<LeftHead, LeftTail...> left, Right right)
+{
+	return make_compose(left.actions(), std::make_tuple(right));
+}
+
+template <typename Left, typename RightHead, typename... RightTail>
+compose<Left, RightHead, RightTail...>
+operator>> (Left left, compose<RightHead, RightTail...> right)
+{
+	return make_compose(std::make_tuple(left), right);
+}
+
 template <typename Left, typename Right>
 compose<Left, Right>
 operator>> (Left left, Right right)
 {
 	return { left, right };
+}
+
+/*! Helper to accumulate actions.
+ */
+template <typename LeftHead, typename... LeftTail, size_t... LeftIndices, typename RightHead, typename... RightTail, size_t... RightIndices>
+accumulate<LeftHead, LeftTail..., RightHead, RightTail...>
+make_accumulate (std::tuple<LeftHead, LeftTail...> left, std::tuple<RightHead, RightTail...> right, std::index_sequence<LeftIndices...>, std::index_sequence<RightIndices...>)
+{
+	return { std::get<LeftIndices>(left)..., std::get<RightIndices>(right)... };
+}
+
+template <typename LeftHead, typename... LeftTail, typename LeftIndices = std::make_index_sequence<1 + sizeof...(LeftTail)>, typename RightHead, typename... RightTail, typename RightIndices = std::make_index_sequence<1 + sizeof...(RightTail)>>
+accumulate<LeftHead, LeftTail..., RightHead, RightTail...>
+make_accumulate (std::tuple<LeftHead, LeftTail...> left, std::tuple<RightHead, RightTail...> right)
+{
+	return make_accumulate(left, right, LeftIndices{}, RightIndices{});
+}
+
+template <typename LeftHead, typename... LeftTail, typename RightHead, typename... RightTail>
+accumulate<LeftHead, LeftTail..., RightHead, RightTail...>
+operator+ (accumulate<LeftHead, LeftTail...> left, accumulate<RightHead, RightTail...> right)
+{
+	return make_accumulate(left.actions(), right.actions());
+}
+
+template <typename LeftHead, typename... LeftTail, typename Right>
+accumulate<LeftHead, LeftTail..., Right>
+operator+ (accumulate<LeftHead, LeftTail...> left, Right right)
+{
+	return make_accumulate(left.actions(), std::make_tuple(right));
+}
+
+template <typename Left, typename RightHead, typename... RightTail>
+accumulate<Left, RightHead, RightTail...>
+operator+ (Left left, accumulate<RightHead, RightTail...> right)
+{
+	return make_accumulate(std::make_tuple(left), right);
 }
 
 template <typename Left, typename Right>
