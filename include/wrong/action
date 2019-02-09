@@ -52,202 +52,6 @@ struct none final : public virtual base<nothing, nothing>
 	}
 };
 
-/*! An action that takes nothing and produces a list of source files.
- *
- * The action is created with a list of matchers to collect sources to compile.
- */
-struct sources final : public virtual base<nothing, files>
-{
-	sources (files input)
-		: _input(input)
-	{ }
-
-	files
-	run (nothing _)
-	{
-		return _input;
-	}
-
-private:
-	files _input;
-};
-
-/*! An action that takes nothing and produces a list of source files.
- *
- * The action is created with a list of matchers to collect objects to link.
- */
-struct objects final : public virtual base<nothing, files>
-{
-	objects (files input)
-		: _input(input)
-	{ }
-
-	files
-	run (nothing _)
-	{
-		return _input;
-	}
-
-private:
-	files _input;
-};
-/*! An action that takes a list of files (source files) and produces a list of
- *  files (object files).
- *
- * In this step the input files are checked to be up-to-date with the output
- * files, and compilation is skipped if not needed.
- */
-class compile final : public virtual base<files, files>
-{
-public:
-	files
-	run (files input)
-	{
-		return input;
-	}
-
-	/*! Add a path to the include paths.
-	 */
-	compile
-	include (std::string value)
-	{
-		_flags.push_back("-I" + value);
-		return *this;
-	}
-
-	/*! Add a definition.
-	 */
-	compile
-	define (std::string name, std::string value)
-	{
-		_flags.push_back("-D" + name + "=" + value);
-		return *this;
-	}
-
-	/*! Enable a definition.
-	 */
-	compile
-	define (std::string name)
-	{
-		_flags.push_back("-D" + name + "=1");
-		return *this;
-	}
-
-	compile
-	standard (std::string name)
-	{
-		_flags.push_back("-std=" + name);
-		return *this;
-	}
-
-private:
-	std::vector<std::string> _flags;
-};
-
-/*! An action that takes a list of files (object files) and produces a program.
- *
- * This is the final linking step that produces a valid provision.
- */
-class executable final : public virtual base<files, program>
-{
-public:
-	program
-	run (files input)
-	{
-		return { "" };
-	}
-
-	/*! Add a path to the library paths.
-	 */
-	executable
-	include (std::string value)
-	{
-		_flags.push_back("-L" + value);
-		return *this;
-	}
-
-	/*! Add a library to be linked.
-	 */
-	executable
-	link (std::string name)
-	{
-		_flags.push_back("-l" + name);
-		return *this;
-	}
-
-	/*! Add a library to be linked.
-	 */
-	executable
-	use (std::string path)
-	{
-		// TODO(meh): actually link it
-		return *this;
-	}
-
-private:
-	std::vector<std::string> _flags;
-};
-
-/*! An action that takes a list of files (object files) and produces a shared
- *  library.
- *
- * This is the final linking step that produces a valid provision.
- */
-class shared final : public virtual base<files, library>
-{
-public:
-	library
-	run (files input)
-	{
-		return { false, {}, {} };
-	}
-
-	/*! Add a path to the library paths.
-	 */
-	shared
-	include (std::string value)
-	{
-		_flags.push_back("-L" + value);
-		return *this;
-	}
-
-	/*! Add a library to be linked.
-	 */
-	shared
-	link (std::string name)
-	{
-		_flags.push_back("-l" + name);
-		return *this;
-	}
-
-	/*! Add a library to be linked.
-	 */
-	shared
-	use (std::string path)
-	{
-		// TODO(meh): actually link it
-		return *this;
-	}
-
-private:
-	std::vector<std::string> _flags;
-};
-
-/*! An action that takes a list of files (object files) and produces a static
- *  archive.
- *
- * This is the final linking step that produces a valid provision.
- */
-class archive final : public virtual base<files, library>
-{
-public:
-	library
-	run (files input)
-	{
-		return { true, {}, {} };
-	}
-};
-
 /*! Trick to put an action into a pointer.
  */
 template <typename Action>
@@ -394,41 +198,42 @@ private:
 	std::tuple<Head, Tail...> _actions;
 };
 
+// Helper to create operators from a tuple.
+template <template <typename...> class Operator, typename... Action, size_t... Indices>
+Operator<Action...>
+make (std::tuple<Action...> actions, std::index_sequence<Indices...>)
+{
+	return { std::get<Indices>(actions)... };
+}
+
+template <template <typename...> class Operator, typename... Action, typename Indices = std::make_index_sequence<sizeof...(Action)>>
+Operator<Action...>
+make (std::tuple<Action...> actions)
+{
+	return make<Operator>(actions, Indices{});
+}
+
 /*! Helper to compose actions.
  */
-template <typename LeftHead, typename... LeftTail, size_t... LeftIndices, typename RightHead, typename... RightTail, size_t... RightIndices>
-compose<LeftHead, LeftTail..., RightHead, RightTail...>
-make_compose (std::tuple<LeftHead, LeftTail...> left, std::tuple<RightHead, RightTail...> right, std::index_sequence<LeftIndices...>, std::index_sequence<RightIndices...>)
+template <typename... Left, typename... Right>
+compose<Left..., Right...>
+operator>> (compose<Left...> left, compose<Right...> right)
 {
-	return { std::get<LeftIndices>(left)..., std::get<RightIndices>(right)... };
+	return make<compose>(concat(left.actions(), right.actions()));
 }
 
-template <typename LeftHead, typename... LeftTail, typename LeftIndices = std::make_index_sequence<1 + sizeof...(LeftTail)>, typename RightHead, typename... RightTail, typename RightIndices = std::make_index_sequence<1 + sizeof...(RightTail)>>
-compose<LeftHead, LeftTail..., RightHead, RightTail...>
-make_compose (std::tuple<LeftHead, LeftTail...> left, std::tuple<RightHead, RightTail...> right)
+template <typename... Left, typename Right>
+compose<Left..., Right>
+operator>> (compose<Left...> left, Right right)
 {
-	return make_compose(left, right, LeftIndices{}, RightIndices{});
+	return make<compose>(concat(left.actions(), std::make_tuple(right)));
 }
 
-template <typename LeftHead, typename... LeftTail, typename RightHead, typename... RightTail>
-compose<LeftHead, LeftTail..., RightHead, RightTail...>
-operator>> (compose<LeftHead, LeftTail...> left, compose<RightHead, RightTail...> right)
+template <typename Left, typename... Right>
+compose<Left, Right...>
+operator>> (Left left, compose<Right...> right)
 {
-	return make_compose(left.actions(), right.actions());
-}
-
-template <typename LeftHead, typename... LeftTail, typename Right>
-compose<LeftHead, LeftTail..., Right>
-operator>> (compose<LeftHead, LeftTail...> left, Right right)
-{
-	return make_compose(left.actions(), std::make_tuple(right));
-}
-
-template <typename Left, typename RightHead, typename... RightTail>
-compose<Left, RightHead, RightTail...>
-operator>> (Left left, compose<RightHead, RightTail...> right)
-{
-	return make_compose(std::make_tuple(left), right);
+	return make<compose>(concat(std::make_tuple(left), right));
 }
 
 template <typename Left, typename Right>
@@ -440,39 +245,25 @@ operator>> (Left left, Right right)
 
 /*! Helper to accumulate actions.
  */
-template <typename LeftHead, typename... LeftTail, size_t... LeftIndices, typename RightHead, typename... RightTail, size_t... RightIndices>
-accumulate<LeftHead, LeftTail..., RightHead, RightTail...>
-make_accumulate (std::tuple<LeftHead, LeftTail...> left, std::tuple<RightHead, RightTail...> right, std::index_sequence<LeftIndices...>, std::index_sequence<RightIndices...>)
+template <typename... Left, typename... Right>
+accumulate<Left..., Right...>
+operator+ (accumulate<Left...> left, accumulate<Right...> right)
 {
-	return { std::get<LeftIndices>(left)..., std::get<RightIndices>(right)... };
+	return make<accumulate>(concat(left.actions(), right.actions()));
 }
 
-template <typename LeftHead, typename... LeftTail, typename LeftIndices = std::make_index_sequence<1 + sizeof...(LeftTail)>, typename RightHead, typename... RightTail, typename RightIndices = std::make_index_sequence<1 + sizeof...(RightTail)>>
-accumulate<LeftHead, LeftTail..., RightHead, RightTail...>
-make_accumulate (std::tuple<LeftHead, LeftTail...> left, std::tuple<RightHead, RightTail...> right)
+template <typename... Left, typename Right>
+accumulate<Left..., Right>
+operator+ (accumulate<Left...> left, Right right)
 {
-	return make_accumulate(left, right, LeftIndices{}, RightIndices{});
+	return make<accumulate>(concat(left.actions(), std::make_tuple(right)));
 }
 
-template <typename LeftHead, typename... LeftTail, typename RightHead, typename... RightTail>
-accumulate<LeftHead, LeftTail..., RightHead, RightTail...>
-operator+ (accumulate<LeftHead, LeftTail...> left, accumulate<RightHead, RightTail...> right)
+template <typename Left, typename... Right>
+accumulate<Left, Right...>
+operator+ (Left left, accumulate<Right...> right)
 {
-	return make_accumulate(left.actions(), right.actions());
-}
-
-template <typename LeftHead, typename... LeftTail, typename Right>
-accumulate<LeftHead, LeftTail..., Right>
-operator+ (accumulate<LeftHead, LeftTail...> left, Right right)
-{
-	return make_accumulate(left.actions(), std::make_tuple(right));
-}
-
-template <typename Left, typename RightHead, typename... RightTail>
-accumulate<Left, RightHead, RightTail...>
-operator+ (Left left, accumulate<RightHead, RightTail...> right)
-{
-	return make_accumulate(std::make_tuple(left), right);
+	return make<accumulate>(concat(std::make_tuple(left), right));
 }
 
 template <typename Left, typename Right>
@@ -499,6 +290,209 @@ then (std::function<Output(Input)> fun)
 {
 	return { fun };
 }
+
+/*! An action that takes nothing and produces a list of source files.
+ *
+ * The action is created with a list of matchers to collect sources to compile.
+ */
+struct sources final : public virtual base<nothing, files>
+{
+	sources (files input)
+		: _input(input)
+	{ }
+
+	files
+	run (nothing _)
+	{
+		// TODO(meh): implement this
+		return _input;
+	}
+
+private:
+	files _input;
+};
+
+/*! An action that takes nothing and produces a list of source files.
+ *
+ * The action is created with a list of matchers to collect objects to link.
+ */
+struct objects final : public virtual base<nothing, files>
+{
+	objects (files input)
+		: _input(input)
+	{ }
+
+	files
+	run (nothing _)
+	{
+		// TODO(meh): implement this
+		return _input;
+	}
+
+private:
+	files _input;
+};
+
+/*! An action that takes a list of files (source files) and produces a list of
+ *  files (object files).
+ *
+ * In this step the input files are checked to be up-to-date with the output
+ * files, and compilation is skipped if not needed.
+ */
+class compile final : public virtual base<files, files>
+{
+public:
+	files
+	run (files input)
+	{
+		// TODO(meh): implement this
+		return input;
+	}
+
+	/*! Add a path to the include paths.
+	 */
+	compile
+	include (std::string value)
+	{
+		_flags.push_back("-I" + value);
+		return *this;
+	}
+
+	/*! Add a definition.
+	 */
+	compile
+	define (std::string name, std::string value)
+	{
+		_flags.push_back("-D" + name + "=" + value);
+		return *this;
+	}
+
+	/*! Enable a definition.
+	 */
+	compile
+	define (std::string name)
+	{
+		_flags.push_back("-D" + name + "=1");
+		return *this;
+	}
+
+	compile
+	standard (std::string name)
+	{
+		_flags.push_back("-std=" + name);
+		return *this;
+	}
+
+private:
+	std::vector<std::string> _flags;
+};
+
+/*! An action that takes a list of files (object files) and produces a program.
+ *
+ * This is the final linking step that produces a valid provision.
+ */
+class executable final : public virtual base<files, program>
+{
+public:
+	program
+	run (files input)
+	{
+		// TODO(meh): implement this
+		return { "" };
+	}
+
+	/*! Add a path to the library paths.
+	 */
+	executable
+	include (std::string value)
+	{
+		_flags.push_back("-L" + value);
+		return *this;
+	}
+
+	/*! Add a library to be linked.
+	 */
+	executable
+	link (std::string name)
+	{
+		_flags.push_back("-l" + name);
+		return *this;
+	}
+
+	/*! Add a library to be linked.
+	 */
+	executable
+	use (std::string path)
+	{
+		// TODO(meh): actually link it
+		return *this;
+	}
+
+private:
+	std::vector<std::string> _flags;
+};
+
+/*! An action that takes a list of files (object files) and produces a shared
+ *  library.
+ *
+ * This is the final linking step that produces a valid provision.
+ */
+class shared final : public virtual base<files, library>
+{
+public:
+	library
+	run (files input)
+	{
+		// TODO(meh): implement this
+		return { false, {}, {} };
+	}
+
+	/*! Add a path to the library paths.
+	 */
+	shared
+	include (std::string value)
+	{
+		_flags.push_back("-L" + value);
+		return *this;
+	}
+
+	/*! Add a library to be linked.
+	 */
+	shared
+	link (std::string name)
+	{
+		_flags.push_back("-l" + name);
+		return *this;
+	}
+
+	/*! Add a library to be linked.
+	 */
+	shared
+	use (std::string path)
+	{
+		// TODO(meh): actually link it
+		return *this;
+	}
+
+private:
+	std::vector<std::string> _flags;
+};
+
+/*! An action that takes a list of files (object files) and produces a static
+ *  archive.
+ *
+ * This is the final linking step that produces a valid provision.
+ */
+class archive final : public virtual base<files, library>
+{
+public:
+	library
+	run (files input)
+	{
+		// TODO(meh): implement this
+		return { true, {}, {} };
+	}
+};
 
 struct none
 none ()

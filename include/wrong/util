@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <array>
+#include <tuple>
 
 namespace wrong {
 
@@ -17,6 +18,20 @@ using is_all_true = std::is_same<bool_pack<bs..., true>, bool_pack<true, bs...>>
 
 template <size_t N, typename... Ts>
 using nth = typename std::tuple_element<N, std::tuple<Ts...>>::type;
+
+template <typename... Left, size_t... LeftIndices, typename... Right, size_t... RightIndices>
+std::tuple<Left..., Right...>
+concat (std::tuple<Left...> left, std::tuple<Right...> right, std::index_sequence<LeftIndices...>, std::index_sequence<RightIndices...>)
+{
+	return std::make_tuple(std::get<LeftIndices>(left)..., std::get<RightIndices>(right)...);
+}
+
+template <typename... Left, typename LeftIndices = std::make_index_sequence<sizeof...(Left)>, typename... Right, typename RightIndices = std::make_index_sequence<sizeof...(Right)>>
+std::tuple<Left..., Right...>
+concat (std::tuple<Left...> left, std::tuple<Right...> right)
+{
+	return concat(left, right, LeftIndices{}, RightIndices{});
+}
 
 /*! Wrapper for a C stdio stream to a C++ stream.
  */
