@@ -5,13 +5,15 @@
 #include <filesystem>
 #include <functional>
 
-using directory_iterator = std::filesystem::recursive_directory_iterator;
+#include <wrong/util>
 
 namespace wrong {
 
 class files
 {
 public:
+	using directory_iterator = std::filesystem::recursive_directory_iterator;
+
 	class matcher
 	{
 	public:
@@ -85,41 +87,23 @@ public:
 	}
 
 public:
+	template <typename Matcher>
 	files&
-	include (std::initializer_list<matcher> args)
+	include (std::initializer_list<Matcher> args)
 	{
 		for (auto arg : args) {
-			_include.push_back(arg);
+			_include.push_back(std::move(arg));
 		}
 
 		return *this;
 	}
 
+	template <typename Matcher>
 	files&
-	include (std::initializer_list<std::string> args)
+	exclude (std::initializer_list<Matcher> args)
 	{
 		for (auto arg : args) {
-			_include.push_back(arg);
-		}
-
-		return *this;
-	}
-
-	files&
-	exclude (std::initializer_list<matcher> args)
-	{
-		for (auto arg : args) {
-			_exclude.push_back(arg);
-		}
-
-		return *this;
-	}
-
-	files&
-	exclude (std::initializer_list<std::string> args)
-	{
-		for (auto arg : args) {
-			_exclude.push_back(arg);
+			_exclude.push_back(std::move(arg));
 		}
 
 		return *this;
@@ -131,25 +115,74 @@ public:
 		return { directory_iterator(path), _include, _exclude };
 	}
 
+	template <typename Matcher>
 	files&
-	operator+= (files const& rhs)
-  {
+	operator<< (Matcher matcher)
+	{
+		return include({ matcher });
+	}
+
+	files&
+	operator|= (files const& rhs)
+	{
 		_include.insert(_include.end(), rhs._include.begin(), rhs._include.end());
 		_exclude.insert(_exclude.end(), rhs._exclude.begin(), rhs._exclude.end());
-
-    return *this;
-  }
+		return *this;
+	}
 
 	friend files
-	operator+ (files lhs, files const& rhs)
-  {
-    lhs += rhs;
-    return lhs;
-  }
+	operator| (files lhs, files const& rhs)
+	{
+		lhs |= rhs;
+		return lhs;
+	}
+
+	template <typename Matcher>
+	files&
+	operator+= (std::initializer_list<Matcher> matcher)
+	{
+		include(matcher);
+		return *this;
+	}
+
+	template <typename Matcher>
+	friend files
+	operator+ (files lhs, std::initializer_list<Matcher> matcher)
+	{
+		lhs += matcher;
+		return lhs;
+	}
+
+	template <typename Matcher>
+	files&
+	operator-= (std::initializer_list<Matcher> matcher)
+	{
+		include(matcher);
+		return *this;
+	}
+
+	template <typename Matcher>
+	friend files
+	operator- (files lhs, std::initializer_list<Matcher> matcher)
+	{
+		lhs -= matcher;
+		return lhs;
+	}
 
 private:
 	std::vector<matcher> _include;
 	std::vector<matcher> _exclude;
+};
+
+template <>
+struct union_of<files>
+{
+	template <typename... Args>
+	files
+	operator() (Args... args)
+	{
+		return (args | ...);
+	}
 };
 
 }

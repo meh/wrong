@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <array>
 #include <tuple>
+#include <vector>
 
 namespace wrong {
 
@@ -26,12 +27,31 @@ concat (std::tuple<Left...> left, std::tuple<Right...> right, std::index_sequenc
 	return std::make_tuple(std::get<LeftIndices>(left)..., std::get<RightIndices>(right)...);
 }
 
-template <typename... Left, typename LeftIndices = std::make_index_sequence<sizeof...(Left)>, typename... Right, typename RightIndices = std::make_index_sequence<sizeof...(Right)>>
+template <typename... Left, typename... Right>
 std::tuple<Left..., Right...>
 concat (std::tuple<Left...> left, std::tuple<Right...> right)
 {
-	return concat(left, right, LeftIndices{}, RightIndices{});
+	return concat(left, right, std::index_sequence_for<Left...>{}, std::index_sequence_for<Right...>{});
 }
+
+template <typename Type>
+struct union_of;
+
+template <typename T>
+struct union_of<std::vector<T>>
+{
+	template <typename... Args>
+	std::vector<T>
+	operator() (Args... args)
+	{
+		std::vector<T> output;
+		(output.insert(output.end(),
+			std::make_move_iterator(args.begin()),
+			std::make_move_iterator(args.end())), ...);
+
+		return output;
+	}
+};
 
 /*! Wrapper for a C stdio stream to a C++ stream.
  */

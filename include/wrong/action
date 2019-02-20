@@ -7,13 +7,28 @@
 
 #include <wrong/provision>
 #include <wrong/files>
+#include <wrong/compiler>
 
 namespace wrong { namespace action {
 
+template <typename Self, typename = void>
+struct is_action : std::false_type
+{ };
+
+template <typename Self>
+struct is_action<Self, std::enable_if_t<
+	std::is_class<typename Self::input>::value &&
+	std::is_class<typename Self::output>::value>> : std::true_type
+{ };
+
 /*! Traits every action must define.
  */
-template <typename Self>
+template <typename Self, typename = void>
 struct traits
+{ };
+
+template <typename Self>
+struct traits<Self, std::enable_if_t<is_action<Self>::value>>
 {
 	using input = typename Self::input;
 	using output = typename Self::output;
@@ -115,13 +130,13 @@ private:
 /*! Allows composition of actions.
  */
 template <typename Head, typename... Tail>
-class compose final
+class composition final
 	: public virtual base<typename traits<Head>::input, typename traits<nth<sizeof...(Tail) - 1, Tail...>>::output>
 {
 	static_assert(sizeof...(Tail) >= 1, "unary compose makes no sense");
 
 public:
-	compose (Head head, Tail... tail)
+	composition (Head head, Tail... tail)
 		: _actions({ head, tail... })
 	{ }
 
@@ -157,27 +172,25 @@ private:
 	std::tuple<Head, Tail...> _actions;
 };
 
-template <typename Head, typename... Tail>
-class accumulate final
+template <typename BinaryOp, typename Head, typename... Tail>
+class reduction final
 	: public virtual base<typename traits<Head>::input, typename traits<Head>::output>
 {
-	static_assert(sizeof...(Tail) >= 1, "unary accumulate makes no sense");
-
 	static_assert(is_all_true<std::is_same<typename traits<Head>::input, typename traits<Tail>::input>::value...>::value,
-		"cannot accumulate actions of different input type");
+		"cannot reduce actions of different input type");
 
 	static_assert(is_all_true<std::is_same<typename traits<Head>::output, typename traits<Tail>::output>::value...>::value,
-		"cannot accumulate actions of different output type");
+		"cannot reduce actions of different output type");
 
 public:
-	accumulate (Head head, Tail... tail)
-		: _actions({ head, tail... })
+	reduction (BinaryOp op, Head head, Tail... tail)
+		: _op(op), _actions({ head, tail... })
 	{ }
 
 	typename traits<Head>::output
 	run (typename traits<Head>::input input)
 	{
-		return sum(input, std::index_sequence_for<Tail...>{});
+		return run(input, std::index_sequence_for<Tail...>{});
 	}
 
 	std::tuple<Head, Tail...>
@@ -189,16 +202,23 @@ public:
 private:
 	template <size_t... I>
 	typename traits<Head>::output
-	sum (typename traits<Head>::input input, std::index_sequence<I...>)
+	run (typename traits<Head>::input input, std::index_sequence<I...>)
 	{
-		return std::get<0>(_actions).run(input) + (std::get<I>(_actions).run(input) + ...);
+		std::vector<typename traits<Head>::output> output;
+		output.push_back(std::get<0>(_actions).run(input));
+		(output.push_back(std::get<I + 1>(_actions).run(input)), ...);
+
+		// TODO(meh): Implement this with std::reduce, or our own version of it.
+		return std::accumulate(output.begin() + 1, output.end(), output[0], _op);
 	}
 
 private:
+	BinaryOp _op;
 	std::tuple<Head, Tail...> _actions;
 };
 
-// Helper to create operators from a tuple.
+/*! Helper to create compose from a tuple.
+ */
 template <template <typename...> class Operator, typename... Action, size_t... Indices>
 Operator<Action...>
 make (std::tuple<Action...> actions, std::index_sequence<Indices...>)
@@ -206,71 +226,124 @@ make (std::tuple<Action...> actions, std::index_sequence<Indices...>)
 	return { std::get<Indices>(actions)... };
 }
 
-template <template <typename...> class Operator, typename... Action, typename Indices = std::make_index_sequence<sizeof...(Action)>>
+template <template <typename...> class Operator, typename... Action>
 Operator<Action...>
 make (std::tuple<Action...> actions)
 {
-	return make<Operator>(actions, Indices{});
+	return make<Operator>(actions, std::index_sequence_for<Action...>{});
+}
+
+template <template <typename, typename...> class Operator, typename BinaryOp, typename... Action, size_t... Indices>
+Operator<BinaryOp, Action...>
+make (BinaryOp op, std::tuple<Action...> actions, std::index_sequence<Indices...>)
+{
+	return { op, std::get<Indices>(actions)... };
+}
+
+template <template <typename, typename...> class Operator, typename BinaryOp, typename... Action>
+Operator<BinaryOp, Action...>
+make (BinaryOp op, std::tuple<Action...> actions)
+{
+	return make<Operator>(op, actions, std::index_sequence_for<Action...>{});
 }
 
 /*! Helper to compose actions.
  */
 template <typename... Left, typename... Right>
-compose<Left..., Right...>
-operator>> (compose<Left...> left, compose<Right...> right)
+composition<Left..., Right...>
+operator>> (composition<Left...> left, composition<Right...> right)
 {
-	return make<compose>(concat(left.actions(), right.actions()));
+	return make<composition>(concat(left.actions(), right.actions()));
 }
 
 template <typename... Left, typename Right>
-compose<Left..., Right>
-operator>> (compose<Left...> left, Right right)
+composition<Left..., Right>
+operator>> (composition<Left...> left, Right right)
 {
-	return make<compose>(concat(left.actions(), std::make_tuple(right)));
+	return make<composition>(concat(left.actions(), std::make_tuple(right)));
 }
 
 template <typename Left, typename... Right>
-compose<Left, Right...>
-operator>> (Left left, compose<Right...> right)
+composition<Left, Right...>
+operator>> (Left left, composition<Right...> right)
 {
-	return make<compose>(concat(std::make_tuple(left), right));
+	return make<composition>(concat(std::make_tuple(left), right));
 }
 
-template <typename Left, typename Right>
-compose<Left, Right>
+template <typename Left, typename Right, typename = std::enable_if_t<is_action<Left>::value && is_action<Right>::value>>
+composition<Left, Right>
 operator>> (Left left, Right right)
 {
 	return { left, right };
 }
 
-/*! Helper to accumulate actions.
- */
 template <typename... Left, typename... Right>
-accumulate<Left..., Right...>
-operator+ (accumulate<Left...> left, accumulate<Right...> right)
+composition<Right..., Left...>
+operator<< (composition<Left...> left, composition<Right...> right)
 {
-	return make<accumulate>(concat(left.actions(), right.actions()));
+	return make<composition>(concat(right.actions(), left.actions()));
 }
 
 template <typename... Left, typename Right>
-accumulate<Left..., Right>
-operator+ (accumulate<Left...> left, Right right)
+composition<Right, Left...>
+operator<< (composition<Left...> left, Right right)
 {
-	return make<accumulate>(concat(left.actions(), std::make_tuple(right)));
+	return make<composition>(concat(std::make_tuple(right), left.actions()));
 }
 
 template <typename Left, typename... Right>
-accumulate<Left, Right...>
-operator+ (Left left, accumulate<Right...> right)
+composition<Right..., Left>
+operator<< (Left left, composition<Right...> right)
 {
-	return make<accumulate>(concat(std::make_tuple(left), right));
+	return make<composition>(concat(right, std::make_tuple(left)));
 }
 
-template <typename Left, typename Right>
-accumulate<Left, Right>
+template <typename Left, typename Right, typename = std::enable_if_t<is_action<Left>::value && is_action<Right>::value>>
+composition<Right, Left>
+operator<< (Left left, Right right)
+{
+	return { right, left };
+}
+
+/*! Helper to unify action results.
+ */
+template <typename BinaryOp, typename... Left, typename... Right>
+auto
+operator+ (reduction<BinaryOp, Left...> left, reduction<BinaryOp, Right...> right)
+{
+	return make<reduction>(union_of<typename traits<nth<0, Left...>>::output>(),
+		concat(left.actions(), right.actions()));
+}
+
+template <typename... Left, typename Right>
+auto
+operator+ (reduction<Left...> left, Right right)
+{
+	return make<reduction>(union_of<typename traits<Right>::output>(),
+		concat(left.actions(), std::make_tuple(right)));
+}
+
+template <typename Left, typename... Right>
+auto
+operator+ (Left left, reduction<Right...> right)
+{
+	return make<reduction>(union_of<typename traits<Left>::output>(),
+		concat(std::make_tuple(left), right));
+}
+
+template <typename Left, typename Right, typename = std::enable_if_t<is_action<Left>::value && is_action<Right>::value>>
+auto
 operator+ (Left left, Right right)
 {
-	return { left, right };
+	return make<reduction>(union_of<typename traits<Left>::output>(),
+		std::make_tuple(left, right));
+}
+
+template <typename BinaryOp, typename... Actions>
+auto
+reduce (BinaryOp op, Actions... actions)
+{
+	return make<reduction>(op, std::make_tuple(actions...));
 }
 
 /*! Helper to create an std::unique_ptr out of any action.
