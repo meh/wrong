@@ -20,20 +20,6 @@ using is_all_true = std::is_same<bool_pack<bs..., true>, bool_pack<true, bs...>>
 template <size_t N, typename... Ts>
 using nth = typename std::tuple_element<N, std::tuple<Ts...>>::type;
 
-template <typename... Left, size_t... LeftIndices, typename... Right, size_t... RightIndices>
-std::tuple<Left..., Right...>
-concat (std::tuple<Left...> left, std::tuple<Right...> right, std::index_sequence<LeftIndices...>, std::index_sequence<RightIndices...>)
-{
-	return std::make_tuple(std::get<LeftIndices>(left)..., std::get<RightIndices>(right)...);
-}
-
-template <typename... Left, typename... Right>
-std::tuple<Left..., Right...>
-concat (std::tuple<Left...> left, std::tuple<Right...> right)
-{
-	return concat(left, right, std::index_sequence_for<Left...>{}, std::index_sequence_for<Right...>{});
-}
-
 template <typename Type>
 struct union_of;
 

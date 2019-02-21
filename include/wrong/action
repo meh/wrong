@@ -11,14 +11,28 @@
 
 namespace wrong { namespace action {
 
+/*! Base class that any action must define.
+ */
+template <typename Input, typename Output>
+struct base
+{
+	using input = Input;
+	using output = Output;
+
+	virtual Output run (Input input) = 0;
+	virtual ~base () { }
+};
+
+/*! Check whether a type is a valid action or not.
+ */
 template <typename Self, typename = void>
 struct is_action : std::false_type
 { };
 
 template <typename Self>
 struct is_action<Self, std::enable_if_t<
-	std::is_class<typename Self::input>::value &&
-	std::is_class<typename Self::output>::value>> : std::true_type
+	std::is_base_of<base<typename Self::input, typename Self::output>, Self>::value>>
+: std::true_type
 { };
 
 /*! Traits every action must define.
@@ -30,18 +44,13 @@ struct traits
 template <typename Self>
 struct traits<Self, std::enable_if_t<is_action<Self>::value>>
 {
+	/*! The input type.
+	 */
 	using input = typename Self::input;
+
+	/*! The output type.
+	 */
 	using output = typename Self::output;
-};
-
-template <typename Input, typename Output>
-struct base
-{
-	using input = Input;
-	using output = Output;
-
-	virtual Output run (Input input) = 0;
-	virtual ~base () { }
 };
 
 /*! Nothing of value.
@@ -88,26 +97,10 @@ private:
 	Action _action;
 };
 
-/*! Call the function as an action.
+/*! Turn a function into an action.
  *
  * What this allows is to turn a normal function into an action, making it
  * usable within the rest of the system.
- *
- * ```cpp
- * // For example, this allows the creation of conditionals.
- * sources({ "source/?.cpp" })
- * >> apply<files, files>([](auto sources) {
- *   // Checks if there's a source file named "d.cpp".
- *   if (sources.contains("source/d.cpp")) {
- *      // If so, pretend there is only one source file called "a.cpp".
- *      return { "source/a.cpp" };
- *   }
- *   else {
- *      return sources;
- *   }
- * })
- * >> compile()
- * ```
  */
 template <typename Input, typename Output>
 class function final : public virtual base<Input, Output>
@@ -128,10 +121,33 @@ private:
 };
 
 /*! Allows composition of actions.
+ *
+ * It's essentially function composition, actions are chained together to form
+ * an action that takes the input of the first action and returns the output of
+ * the last, piping input to output of each action.
+ *
+ * Composition is one of the most important concepts involved in the action
+ * system, it's what actually makes it flexible, and as you might have guessed,
+ * composable.
+ *
+ * # Example
+ *
+ * In this example actions are composed to compile some sources into an
+ * executable.
+ *
+ * ```cpp
+ * sources({ "source/{a,b,c}.cpp" })
+ * >> compile()
+ * >> executable()
+ * ```
+ *
+ * * First `sources` takes `nothing` as input and reurns a `files` as output.
+ * * Then `compile` takes `files` as input and returns `files` as output.
+ * * And finally `executable` takes `files` as input and returns a `program`
+ *   provision.
  */
 template <typename Head, typename... Tail>
-class composition final
-	: public virtual base<typename traits<Head>::input, typename traits<nth<sizeof...(Tail) - 1, Tail...>>::output>
+class composition final : public virtual base<typename traits<Head>::input, typename traits<nth<sizeof...(Tail) - 1, Tail...>>::output>
 {
 	static_assert(sizeof...(Tail) >= 1, "unary compose makes no sense");
 
@@ -143,7 +159,7 @@ public:
 	typename traits<nth<sizeof...(Tail) - 1, Tail...>>::output
 	run (typename traits<Head>::input input)
 	{
-		return multiply<typename traits<nth<sizeof...(Tail) - 1, Tail...>>::output,
+		return _run<typename traits<nth<sizeof...(Tail) - 1, Tail...>>::output,
 			0, Head, Tail...>(input);
 	}
 
@@ -156,25 +172,26 @@ public:
 private:
 	template <typename Output, size_t I, typename First>
 	Output
-	multiply (typename traits<First>::input input)
+	_run (typename traits<First>::input input)
 	{
 		return std::get<I>(_actions).run(input);
 	}
 
 	template <typename Output, size_t I, typename First, typename Second, typename... Rest>
 	Output
-	multiply (typename traits<First>::input input)
+	_run (typename traits<First>::input input)
 	{
-		return multiply<Output, I + 1, Second, Rest...>(std::get<I>(_actions).run(input));
+		return _run<Output, I + 1, Second, Rest...>(std::get<I>(_actions).run(input));
 	}
 
 private:
 	std::tuple<Head, Tail...> _actions;
 };
 
+/*! Allows reducing the output of multiple actions into one.
+ */
 template <typename BinaryOp, typename Head, typename... Tail>
-class reduction final
-	: public virtual base<typename traits<Head>::input, typename traits<Head>::output>
+class reduction final : public virtual base<typename traits<Head>::input, typename traits<Head>::output>
 {
 	static_assert(is_all_true<std::is_same<typename traits<Head>::input, typename traits<Tail>::input>::value...>::value,
 		"cannot reduce actions of different input type");
@@ -221,30 +238,30 @@ private:
  */
 template <template <typename...> class Operator, typename... Action, size_t... Indices>
 Operator<Action...>
-make (std::tuple<Action...> actions, std::index_sequence<Indices...>)
+op (std::tuple<Action...> actions, std::index_sequence<Indices...>)
 {
 	return { std::get<Indices>(actions)... };
 }
 
 template <template <typename...> class Operator, typename... Action>
 Operator<Action...>
-make (std::tuple<Action...> actions)
+op (std::tuple<Action...> actions)
 {
-	return make<Operator>(actions, std::index_sequence_for<Action...>{});
+	return op<Operator>(actions, std::index_sequence_for<Action...>{});
 }
 
 template <template <typename, typename...> class Operator, typename BinaryOp, typename... Action, size_t... Indices>
 Operator<BinaryOp, Action...>
-make (BinaryOp op, std::tuple<Action...> actions, std::index_sequence<Indices...>)
+op (BinaryOp bop, std::tuple<Action...> actions, std::index_sequence<Indices...>)
 {
-	return { op, std::get<Indices>(actions)... };
+	return { bop, std::get<Indices>(actions)... };
 }
 
 template <template <typename, typename...> class Operator, typename BinaryOp, typename... Action>
 Operator<BinaryOp, Action...>
-make (BinaryOp op, std::tuple<Action...> actions)
+op (BinaryOp bop, std::tuple<Action...> actions)
 {
-	return make<Operator>(op, actions, std::index_sequence_for<Action...>{});
+	return op<Operator>(bop, actions, std::index_sequence_for<Action...>{});
 }
 
 /*! Helper to compose actions.
@@ -253,21 +270,21 @@ template <typename... Left, typename... Right>
 composition<Left..., Right...>
 operator>> (composition<Left...> left, composition<Right...> right)
 {
-	return make<composition>(concat(left.actions(), right.actions()));
+	return op<composition>(std::tuple_cat(left.actions(), right.actions()));
 }
 
 template <typename... Left, typename Right>
 composition<Left..., Right>
 operator>> (composition<Left...> left, Right right)
 {
-	return make<composition>(concat(left.actions(), std::make_tuple(right)));
+	return op<composition>(std::tuple_cat(left.actions(), std::make_tuple(right)));
 }
 
 template <typename Left, typename... Right>
 composition<Left, Right...>
 operator>> (Left left, composition<Right...> right)
 {
-	return make<composition>(concat(std::make_tuple(left), right));
+	return op<composition>(std::tuple_cat(std::make_tuple(left), right));
 }
 
 template <typename Left, typename Right, typename = std::enable_if_t<is_action<Left>::value && is_action<Right>::value>>
@@ -281,21 +298,21 @@ template <typename... Left, typename... Right>
 composition<Right..., Left...>
 operator<< (composition<Left...> left, composition<Right...> right)
 {
-	return make<composition>(concat(right.actions(), left.actions()));
+	return op<composition>(std::tuple_cat(right.actions(), left.actions()));
 }
 
 template <typename... Left, typename Right>
 composition<Right, Left...>
 operator<< (composition<Left...> left, Right right)
 {
-	return make<composition>(concat(std::make_tuple(right), left.actions()));
+	return op<composition>(std::tuple_cat(std::make_tuple(right), left.actions()));
 }
 
 template <typename Left, typename... Right>
 composition<Right..., Left>
 operator<< (Left left, composition<Right...> right)
 {
-	return make<composition>(concat(right, std::make_tuple(left)));
+	return op<composition>(std::tuple_cat(right, std::make_tuple(left)));
 }
 
 template <typename Left, typename Right, typename = std::enable_if_t<is_action<Left>::value && is_action<Right>::value>>
@@ -311,39 +328,39 @@ template <typename BinaryOp, typename... Left, typename... Right>
 auto
 operator+ (reduction<BinaryOp, Left...> left, reduction<BinaryOp, Right...> right)
 {
-	return make<reduction>(union_of<typename traits<nth<0, Left...>>::output>(),
-		concat(left.actions(), right.actions()));
+	return op<reduction>(union_of<typename traits<nth<0, Left...>>::output>(),
+		std::tuple_cat(left.actions(), right.actions()));
 }
 
 template <typename... Left, typename Right>
 auto
 operator+ (reduction<Left...> left, Right right)
 {
-	return make<reduction>(union_of<typename traits<Right>::output>(),
-		concat(left.actions(), std::make_tuple(right)));
+	return op<reduction>(union_of<typename traits<Right>::output>(),
+		std::tuple_cat(left.actions(), std::make_tuple(right)));
 }
 
 template <typename Left, typename... Right>
 auto
 operator+ (Left left, reduction<Right...> right)
 {
-	return make<reduction>(union_of<typename traits<Left>::output>(),
-		concat(std::make_tuple(left), right));
+	return op<reduction>(union_of<typename traits<Left>::output>(),
+		std::tuple_cat(std::make_tuple(left), right));
 }
 
 template <typename Left, typename Right, typename = std::enable_if_t<is_action<Left>::value && is_action<Right>::value>>
 auto
 operator+ (Left left, Right right)
 {
-	return make<reduction>(union_of<typename traits<Left>::output>(),
+	return op<reduction>(union_of<typename traits<Left>::output>(),
 		std::make_tuple(left, right));
 }
 
 template <typename BinaryOp, typename... Actions>
 auto
-reduce (BinaryOp op, Actions... actions)
+reduce (BinaryOp bop, Actions... actions)
 {
-	return make<reduction>(op, std::make_tuple(actions...));
+	return op<reduction>(bop, std::make_tuple(actions...));
 }
 
 /*! Helper to create an std::unique_ptr out of any action.
@@ -368,8 +385,9 @@ then (std::function<Output(Input)> fun)
  *
  * The action is created with a list of matchers to collect sources to compile.
  */
-struct sources final : public virtual base<nothing, files>
+class sources final : public virtual base<nothing, files>
 {
+public:
 	sources (files input)
 		: _input(input)
 	{ }
@@ -389,8 +407,9 @@ private:
  *
  * The action is created with a list of matchers to collect objects to link.
  */
-struct objects final : public virtual base<nothing, files>
+class objects final : public virtual base<nothing, files>
 {
+public:
 	objects (files input)
 		: _input(input)
 	{ }
@@ -573,13 +592,23 @@ none ()
 	return {};
 }
 
-struct sources
+template <typename Type>
+requirements
+use (std::string path)
+{
+	requirements r;
+	r.use<Type>(path);
+
+	return r;
+}
+
+class sources
 sources (files input)
 {
 	return input;
 }
 
-struct objects
+class objects
 objects (files input)
 {
 	return input;
