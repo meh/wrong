@@ -4,22 +4,23 @@
 #include <algorithm>
 #include <array>
 #include <numeric>
+#include <tuple>
 
 #include <wrong/provision>
-#include <wrong/files>
+#include <wrong/file_list>
 #include <wrong/compiler>
 
 namespace wrong { namespace action {
 
 /*! Base class that any action must define.
  */
-template <typename Input, typename Output>
+template <typename In, typename Out>
 struct base
 {
-	using input = Input;
-	using output = Output;
+	using in = In;
+	using out = Out;
 
-	virtual Output run (Input input) = 0;
+	virtual Out run (In input) = 0;
 	virtual ~base () { }
 };
 
@@ -31,9 +32,10 @@ struct is_action : std::false_type
 
 template <typename Self>
 struct is_action<Self, std::enable_if_t<
-	std::is_base_of<base<typename Self::input, typename Self::output>, Self>::value>>
+	std::is_base_of<base<typename Self::in, typename Self::out>, Self>::value>>
 : std::true_type
 { };
+
 
 /*! Traits every action must define.
  */
@@ -46,12 +48,22 @@ struct traits<Self, std::enable_if_t<is_action<Self>::value>>
 {
 	/*! The input type.
 	 */
-	using input = typename Self::input;
+	using in = typename Self::in;
 
 	/*! The output type.
 	 */
-	using output = typename Self::output;
+	using out = typename Self::out;
 };
+
+template <typename Left, typename Right, typename = void>
+struct is_bindable : std::false_type
+{ };
+
+template <typename Left, typename Right>
+struct is_bindable<Left, Right, std::enable_if_t<
+	std::is_same<typename traits<Left>::out, typename traits<Right>::in>::value>>
+: std::true_type
+{ };
 
 /*! Nothing of value.
  */
@@ -60,35 +72,43 @@ struct nothing
 	nothing ()
 	{ }
 
-	template <typename Input>
-	nothing (Input _input)
+	template <typename In>
+	nothing (In _input)
 	{ }
 };
 
-/*! An action that takes nothing and returns nothing.
+/*! Turn a value into an action.
  */
-struct none final : public virtual base<nothing, nothing>
+template <typename Value>
+class unit final : public virtual base<nothing, Value>
 {
-	nothing
-	run (nothing input)
+public:
+	unit (Value value)
+		: _value(value)
+	{ }
+
+	Value
+	run (nothing _)
 	{
-		return {};
+		return _value;
 	}
+
+private:
+	Value _value;
 };
 
 /*! Trick to put an action into a pointer.
  */
 template <typename Action>
-class identity final
-	: public virtual base<typename traits<Action>::input, typename traits<Action>::output>
+class identity final : public virtual base<typename traits<Action>::in, typename traits<Action>::out>
 {
 public:
 	identity (Action action)
 		: _action(action)
 	{ }
 
-	typename traits<Action>::output
-	run (typename traits<Action>::input input)
+	typename traits<Action>::out
+	run (typename traits<Action>::in input)
 	{
 		return _action.run(input);
 	}
@@ -102,22 +122,22 @@ private:
  * What this allows is to turn a normal function into an action, making it
  * usable within the rest of the system.
  */
-template <typename Input, typename Output>
-class function final : public virtual base<Input, Output>
+template <typename In, typename Out>
+class function final : public virtual base<In, Out>
 {
 public:
-	function (std::function<Output(Input)> fun)
+	function (std::function<Out(In)> fun)
 		: _fun(fun)
 	{ }
 
-	Output
-	run (Input input)
+	Out
+	run (In input)
 	{
 		return _fun(input);
 	}
 
 private:
-	std::function<Output(Input)> _fun;
+	std::function<Out(In)> _fun;
 };
 
 /*! Allows composition of actions.
@@ -147,41 +167,43 @@ private:
  *   provision.
  */
 template <typename Head, typename... Tail>
-class composition final : public virtual base<typename traits<Head>::input, typename traits<nth<sizeof...(Tail) - 1, Tail...>>::output>
+class bind final : public virtual base<typename traits<Head>::in, typename traits<nth<sizeof...(Tail) - 1, Tail...>>::out>
 {
-	static_assert(sizeof...(Tail) >= 1, "unary compose makes no sense");
+	static_assert(sizeof...(Tail) >= 1, "unary bind makes no sense");
+	// TODO(meh): Figure out how to use is_bindable on Head, Tail... and assert
+	//            on it
 
 public:
-	composition (Head head, Tail... tail)
+	bind (Head head, Tail... tail)
 		: _actions({ head, tail... })
 	{ }
 
-	typename traits<nth<sizeof...(Tail) - 1, Tail...>>::output
-	run (typename traits<Head>::input input)
+	typename traits<nth<sizeof...(Tail) - 1, Tail...>>::out
+	run (typename traits<Head>::in input)
 	{
-		return _run<typename traits<nth<sizeof...(Tail) - 1, Tail...>>::output,
+		return _run<typename traits<nth<sizeof...(Tail) - 1, Tail...>>::out,
 			0, Head, Tail...>(input);
 	}
 
-	std::tuple<Head, Tail...>
+	std::tuple<Head, Tail...>&
 	actions ()
 	{
 		return _actions;
 	}
 
 private:
-	template <typename Output, size_t I, typename First>
-	Output
-	_run (typename traits<First>::input input)
+	template <typename Out, size_t I, typename First>
+	Out
+	_run (typename traits<First>::in input)
 	{
 		return std::get<I>(_actions).run(input);
 	}
 
-	template <typename Output, size_t I, typename First, typename Second, typename... Rest>
-	Output
-	_run (typename traits<First>::input input)
+	template <typename Out, size_t I, typename First, typename Second, typename... Rest>
+	Out
+	_run (typename traits<First>::in input)
 	{
-		return _run<Output, I + 1, Second, Rest...>(std::get<I>(_actions).run(input));
+		return _run<Out, I + 1, Second, Rest...>(std::get<I>(_actions).run(input));
 	}
 
 private:
@@ -191,12 +213,12 @@ private:
 /*! Allows reducing the output of multiple actions into one.
  */
 template <typename BinaryOp, typename Head, typename... Tail>
-class reduction final : public virtual base<typename traits<Head>::input, typename traits<Head>::output>
+class reduction final : public virtual base<typename traits<Head>::in, typename traits<Head>::out>
 {
-	static_assert(is_all_true<std::is_same<typename traits<Head>::input, typename traits<Tail>::input>::value...>::value,
+	static_assert(is_all_true<std::is_same<typename traits<Head>::in, typename traits<Tail>::in>::value...>::value,
 		"cannot reduce actions of different input type");
 
-	static_assert(is_all_true<std::is_same<typename traits<Head>::output, typename traits<Tail>::output>::value...>::value,
+	static_assert(is_all_true<std::is_same<typename traits<Head>::out, typename traits<Tail>::out>::value...>::value,
 		"cannot reduce actions of different output type");
 
 public:
@@ -204,24 +226,18 @@ public:
 		: _op(op), _actions({ head, tail... })
 	{ }
 
-	typename traits<Head>::output
-	run (typename traits<Head>::input input)
+	typename traits<Head>::out
+	run (typename traits<Head>::in input)
 	{
 		return run(input, std::index_sequence_for<Tail...>{});
 	}
 
-	std::tuple<Head, Tail...>
-	actions ()
-	{
-		return _actions;
-	}
-
 private:
 	template <size_t... I>
-	typename traits<Head>::output
-	run (typename traits<Head>::input input, std::index_sequence<I...>)
+	typename traits<Head>::out
+	run (typename traits<Head>::in input, std::index_sequence<I...>)
 	{
-		std::vector<typename traits<Head>::output> output;
+		std::vector<typename traits<Head>::out> output;
 		output.push_back(std::get<0>(_actions).run(input));
 		(output.push_back(std::get<I + 1>(_actions).run(input)), ...);
 
@@ -267,56 +283,56 @@ op (BinaryOp bop, std::tuple<Action...> actions)
 /*! Helper to compose actions.
  */
 template <typename... Left, typename... Right>
-composition<Left..., Right...>
-operator>> (composition<Left...> left, composition<Right...> right)
+bind<Left..., Right...>
+operator>> (bind<Left...> left, bind<Right...> right)
 {
-	return op<composition>(std::tuple_cat(left.actions(), right.actions()));
+	return op<bind>(std::tuple_cat(left.actions(), right.actions()));
 }
 
 template <typename... Left, typename Right>
-composition<Left..., Right>
-operator>> (composition<Left...> left, Right right)
+bind<Left..., Right>
+operator>> (bind<Left...> left, Right right)
 {
-	return op<composition>(std::tuple_cat(left.actions(), std::make_tuple(right)));
+	return op<bind>(std::tuple_cat(left.actions(), std::make_tuple(right)));
 }
 
 template <typename Left, typename... Right>
-composition<Left, Right...>
-operator>> (Left left, composition<Right...> right)
+bind<Left, Right...>
+operator>> (Left left, bind<Right...> right)
 {
-	return op<composition>(std::tuple_cat(std::make_tuple(left), right));
+	return op<bind>(std::tuple_cat(std::make_tuple(left), right));
 }
 
 template <typename Left, typename Right, typename = std::enable_if_t<is_action<Left>::value && is_action<Right>::value>>
-composition<Left, Right>
+bind<Left, Right>
 operator>> (Left left, Right right)
 {
 	return { left, right };
 }
 
 template <typename... Left, typename... Right>
-composition<Right..., Left...>
-operator<< (composition<Left...> left, composition<Right...> right)
+bind<Right..., Left...>
+operator<< (bind<Left...> left, bind<Right...> right)
 {
-	return op<composition>(std::tuple_cat(right.actions(), left.actions()));
+	return op<bind>(std::tuple_cat(right.actions(), left.actions()));
 }
 
 template <typename... Left, typename Right>
-composition<Right, Left...>
-operator<< (composition<Left...> left, Right right)
+bind<Right, Left...>
+operator<< (bind<Left...> left, Right right)
 {
-	return op<composition>(std::tuple_cat(std::make_tuple(right), left.actions()));
+	return op<bind>(std::tuple_cat(std::make_tuple(right), left.actions()));
 }
 
 template <typename Left, typename... Right>
-composition<Right..., Left>
-operator<< (Left left, composition<Right...> right)
+bind<Right..., Left>
+operator<< (Left left, bind<Right...> right)
 {
-	return op<composition>(std::tuple_cat(right, std::make_tuple(left)));
+	return op<bind>(std::tuple_cat(right, std::make_tuple(left)));
 }
 
 template <typename Left, typename Right, typename = std::enable_if_t<is_action<Left>::value && is_action<Right>::value>>
-composition<Right, Left>
+bind<Right, Left>
 operator<< (Left left, Right right)
 {
 	return { right, left };
@@ -328,7 +344,7 @@ template <typename BinaryOp, typename... Left, typename... Right>
 auto
 operator+ (reduction<BinaryOp, Left...> left, reduction<BinaryOp, Right...> right)
 {
-	return op<reduction>(union_of<typename traits<nth<0, Left...>>::output>(),
+	return op<reduction>(union_of<typename traits<nth<0, Left...>>::out>(),
 		std::tuple_cat(left.actions(), right.actions()));
 }
 
@@ -336,7 +352,7 @@ template <typename... Left, typename Right>
 auto
 operator+ (reduction<Left...> left, Right right)
 {
-	return op<reduction>(union_of<typename traits<Right>::output>(),
+	return op<reduction>(union_of<typename traits<Right>::out>(),
 		std::tuple_cat(left.actions(), std::make_tuple(right)));
 }
 
@@ -344,7 +360,7 @@ template <typename Left, typename... Right>
 auto
 operator+ (Left left, reduction<Right...> right)
 {
-	return op<reduction>(union_of<typename traits<Left>::output>(),
+	return op<reduction>(union_of<typename traits<Left>::out>(),
 		std::tuple_cat(std::make_tuple(left), right));
 }
 
@@ -352,7 +368,7 @@ template <typename Left, typename Right, typename = std::enable_if_t<is_action<L
 auto
 operator+ (Left left, Right right)
 {
-	return op<reduction>(union_of<typename traits<Left>::output>(),
+	return op<reduction>(union_of<typename traits<Left>::out>(),
 		std::make_tuple(left, right));
 }
 
@@ -363,10 +379,19 @@ reduce (BinaryOp bop, Actions... actions)
 	return op<reduction>(bop, std::make_tuple(actions...));
 }
 
+/*! Turn a value into an action.
+ */
+template <typename Value>
+unit<Value>
+value (Value value)
+{
+	return value;
+}
+
 /*! Helper to create an std::unique_ptr out of any action.
  */
 template <typename Action>
-std::unique_ptr<action::base<typename traits<Action>::input, typename traits<Action>::output>>
+std::unique_ptr<action::base<typename traits<Action>::in, typename traits<Action>::out>>
 as_ptr (Action action)
 {
 	return std::make_unique<identity<Action>>(action);
@@ -374,55 +399,90 @@ as_ptr (Action action)
 
 /*! Create an action out of any function.
  */
-template <typename Input, typename Output>
-function<Input, Output>
-then (std::function<Output(Input)> fun)
+template <typename In, typename Out>
+function<In, Out>
+then (std::function<Out(In)> fun)
 {
 	return { fun };
 }
 
-/*! An action that takes nothing and produces a list of source files.
- *
- * The action is created with a list of matchers to collect sources to compile.
+struct source;
+struct header;
+struct object;
+
+/*! List of required provisions.
  */
-class sources final : public virtual base<nothing, files>
+class requirements
 {
 public:
-	sources (files input)
-		: _input(input)
+	struct spec
+	{
+		std::string path;
+	};
+
+private:
+	template <typename Action, typename = void>
+	struct use_if_available
+	{
+		use_if_available (std::string _path)
+		{ }
+
+		void
+		apply (Action action)
+		{ }
+	};
+
+	template <typename Action>
+	struct use_if_available<Action, std::enable_if_t<&Action::use>>
+	{
+		use_if_available (std::string path)
+			: _path(path)
+		{ }
+
+		void
+		apply (Action action)
+		{
+			action.use(_path);
+		}
+
+	private:
+		std::string _path;
+	};
+
+public:
+	explicit
+	requirements (std::vector<spec> specs = {})
+		: _specs(specs)
 	{ }
 
-	files
-	run (nothing _)
+	template <typename Type>
+	void
+	use (std::string path)
 	{
-		// TODO(meh): implement this
-		return _input;
+		_specs.push_back({
+			.path = path,
+		});
+	}
+
+	template <typename Action, typename = std::enable_if_t<is_action<Action>::value>>
+	void
+	apply (Action action)
+	{
+		for (auto& spec : _specs) {
+			action.template apply<use_if_available>(spec.path);
+		}
+	}
+
+	requirements
+	operator+ (requirements const& other)
+	{
+		requirements result(_specs);
+		result._specs.insert(result._specs.end(), other._specs.begin(), other._specs.end());
+		return result;
 	}
 
 private:
-	files _input;
-};
-
-/*! An action that takes nothing and produces a list of source files.
- *
- * The action is created with a list of matchers to collect objects to link.
- */
-class objects final : public virtual base<nothing, files>
-{
-public:
-	objects (files input)
-		: _input(input)
-	{ }
-
-	files
-	run (nothing _)
-	{
-		// TODO(meh): implement this
-		return _input;
-	}
-
-private:
-	files _input;
+	std::vector<spec> _specs;
 };
 
 /*! An action that takes a list of files (source files) and produces a list of
@@ -431,14 +491,18 @@ private:
  * In this step the input files are checked to be up-to-date with the output
  * files, and compilation is skipped if not needed.
  */
-class compile final : public virtual base<files, files>
+class compile final : public virtual base<file_list<source>, file_list<object>>
 {
 public:
-	files
-	run (files input)
+	compile (std::shared_ptr<compiler::base> compiler)
+		: _compiler(compiler)
+	{ }
+
+public:
+	file_list<object>
+	run (file_list<source> input)
 	{
-		// TODO(meh): implement this
-		return input;
+		return {};
 	}
 
 	/*! Add a path to the include paths.
@@ -446,7 +510,7 @@ public:
 	compile
 	include (std::string value)
 	{
-		_flags.push_back("-I" + value);
+		_compiler->include(value);
 		return *this;
 	}
 
@@ -455,7 +519,7 @@ public:
 	compile
 	define (std::string name, std::string value)
 	{
-		_flags.push_back("-D" + name + "=" + value);
+		_compiler->define(name, value);
 		return *this;
 	}
 
@@ -464,30 +528,30 @@ public:
 	compile
 	define (std::string name)
 	{
-		_flags.push_back("-D" + name + "=1");
+		_compiler->define(name);
 		return *this;
 	}
 
 	compile
-	standard (std::string name)
+	language (compiler::language::specification&& spec)
 	{
-		_flags.push_back("-std=" + name);
+		_compiler->language(spec);
 		return *this;
 	}
 
 private:
-	std::vector<std::string> _flags;
+	std::shared_ptr<compiler::base> _compiler;
 };
 
 /*! An action that takes a list of files (object files) and produces a program.
  *
  * This is the final linking step that produces a valid provision.
  */
-class executable final : public virtual base<files, program>
+class executable final : public virtual base<file_list<object>, program>
 {
 public:
 	program
-	run (files input)
+	run (file_list<object> input)
 	{
 		// TODO(meh): implement this
 		return { "" };
@@ -529,11 +593,11 @@ private:
  *
  * This is the final linking step that produces a valid provision.
  */
-class shared final : public virtual base<files, library>
+class shared final : public virtual base<file_list<object>, library>
 {
 public:
 	library
-	run (files input)
+	run (file_list<object> input)
 	{
 		// TODO(meh): implement this
 		return { false, {}, {} };
@@ -575,22 +639,16 @@ private:
  *
  * This is the final linking step that produces a valid provision.
  */
-class archive final : public virtual base<files, library>
+class archive final : public virtual base<file_list<object>, library>
 {
 public:
 	library
-	run (files input)
+	run (file_list<object> input)
 	{
 		// TODO(meh): implement this
 		return { true, {}, {} };
 	}
 };
-
-struct none
-none ()
-{
-	return {};
-}
 
 template <typename Type>
 requirements
@@ -602,22 +660,29 @@ use (std::string path)
 	return r;
 }
 
-class sources
-sources (files input)
+auto
+sources (file_list<source> input)
 {
-	return input;
+	return value(input);
 }
 
-class objects
-objects (files input)
+auto
+headers (file_list<header> input)
 {
-	return input;
+	return value(input);
 }
 
+auto
+objects (file_list<object> input)
+{
+	return value(input);
+}
+
+template <typename Compiler = compiler::gcc>
 class compile
 compile ()
 {
-	return {};
+	return { std::make_shared<Compiler>() };
 }
 
 class executable

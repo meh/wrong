@@ -9,7 +9,8 @@
 
 namespace wrong {
 
-class files
+template <typename Tag = void>
+class file_list
 {
 public:
 	using directory_iterator = std::filesystem::recursive_directory_iterator;
@@ -73,22 +74,22 @@ public:
 	};
 
 public:
-	files ()
+	file_list ()
 	{ }
 
-	files (std::initializer_list<std::string> args)
+	file_list (std::initializer_list<std::string> args)
 	{
 		include(args);
 	}
 
-	files (std::initializer_list<matcher> args)
+	file_list (std::initializer_list<matcher> args)
 	{
 		include(args);
 	}
 
 public:
 	template <typename Matcher>
-	files&
+	file_list<Tag>&
 	include (std::initializer_list<Matcher> args)
 	{
 		for (auto arg : args) {
@@ -99,7 +100,7 @@ public:
 	}
 
 	template <typename Matcher>
-	files&
+	file_list<Tag>&
 	exclude (std::initializer_list<Matcher> args)
 	{
 		for (auto arg : args) {
@@ -116,29 +117,29 @@ public:
 	}
 
 	template <typename Matcher>
-	files&
+	file_list<Tag>&
 	operator<< (Matcher matcher)
 	{
 		return include({ matcher });
 	}
 
-	files&
-	operator|= (files const& rhs)
+	file_list<Tag>&
+	operator|= (file_list<Tag> const& rhs)
 	{
 		_include.insert(_include.end(), rhs._include.begin(), rhs._include.end());
 		_exclude.insert(_exclude.end(), rhs._exclude.begin(), rhs._exclude.end());
 		return *this;
 	}
 
-	friend files
-	operator| (files lhs, files const& rhs)
+	friend file_list<Tag>
+	operator| (file_list<Tag> lhs, file_list<Tag> const& rhs)
 	{
 		lhs |= rhs;
 		return lhs;
 	}
 
 	template <typename Matcher>
-	files&
+	file_list<Tag>&
 	operator+= (std::initializer_list<Matcher> matcher)
 	{
 		include(matcher);
@@ -146,15 +147,15 @@ public:
 	}
 
 	template <typename Matcher>
-	friend files
-	operator+ (files lhs, std::initializer_list<Matcher> matcher)
+	friend file_list<Tag>
+	operator+ (file_list<Tag> lhs, std::initializer_list<Matcher> matcher)
 	{
 		lhs += matcher;
 		return lhs;
 	}
 
 	template <typename Matcher>
-	files&
+	file_list<Tag>&
 	operator-= (std::initializer_list<Matcher> matcher)
 	{
 		include(matcher);
@@ -162,8 +163,8 @@ public:
 	}
 
 	template <typename Matcher>
-	friend files
-	operator- (files lhs, std::initializer_list<Matcher> matcher)
+	friend file_list<Tag>
+	operator- (file_list<Tag> lhs, std::initializer_list<Matcher> matcher)
 	{
 		lhs -= matcher;
 		return lhs;
@@ -174,11 +175,11 @@ private:
 	std::vector<matcher> _exclude;
 };
 
-template <>
-struct union_of<files>
+template <typename Tag>
+struct union_of<file_list<Tag>>
 {
 	template <typename... Args>
-	files
+	file_list<Tag>
 	operator() (Args... args)
 	{
 		return (args | ...);
