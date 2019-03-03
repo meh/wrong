@@ -1,0 +1,275 @@
+/** Copyleft (ɔ) meh. - http://meh.schizofreni.co
+ *
+ * This file is part of wrong - https://github.com/meh/wrong
+ *
+ * wrong is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * wrong is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+#pragma once
+
+#include <wrong/util>
+#include <wrong/action/action>
+
+namespace wrong { namespace action {
+
+template <typename Left, typename Right, typename = void>
+struct is_bindable : std::false_type
+{ };
+
+template <typename Left, typename Right>
+struct is_bindable<Left, Right, std::enable_if_t<
+	std::is_convertible<typename traits<Left>::out, typename traits<Right>::in>::value>>
+: std::true_type
+{ };
+
+/*! Allows composition of actions.
+ *
+ * It's essentially function composition, actions are chained together to form
+ * an action that takes the input of the first action and returns the output of
+ * the last, piping input to output of each action.
+ *
+ * Composition is one of the most important concepts involved in the action
+ * system, it's what actually makes it flexible, and as you might have guessed,
+ * composable.
+ *
+ * # Example
+ *
+ * In this example actions are composed to compile some sources into an
+ * executable.
+ *
+ * ```cpp
+ * sources({ "source/{a,b,c}.cpp" })
+ * >> compile()
+ * >> executable()
+ * ```
+ *
+ * * First `sources` takes `nothing` as input and reurns a `files` as output.
+ * * Then `compile` takes `files` as input and returns `files` as output.
+ * * And finally `executable` takes `files` as input and returns a `program`
+ *   provision.
+ */
+template <typename Head, typename... Tail>
+class bind final : public virtual action<typename traits<Head>::in, typename traits<nth<sizeof...(Tail) - 1, Tail...>>::out>
+{
+	static_assert(sizeof...(Tail) >= 1, "unary bind makes no sense");
+	// TODO(meh): Figure out how to use is_bindable on Head, Tail... and assert
+	//            on it
+
+public:
+	bind (Head head, Tail... tail)
+		: _actions({ head, tail... })
+	{ }
+
+	typename traits<nth<sizeof...(Tail) - 1, Tail...>>::out
+	run (typename traits<Head>::in input)
+	{
+		return _run<typename traits<nth<sizeof...(Tail) - 1, Tail...>>::out,
+			0, Head, Tail...>(input);
+	}
+
+	std::tuple<Head, Tail...>&
+	actions ()
+	{
+		return _actions;
+	}
+
+private:
+	template <typename Out, size_t I, typename First>
+	Out
+	_run (typename traits<First>::in input)
+	{
+		return std::get<I>(_actions).run(input);
+	}
+
+	template <typename Out, size_t I, typename First, typename Second, typename... Rest>
+	Out
+	_run (typename traits<First>::in input)
+	{
+		return _run<Out, I + 1, Second, Rest...>(std::get<I>(_actions).run(input));
+	}
+
+private:
+	std::tuple<Head, Tail...> _actions;
+};
+
+/*! Allows reducing the output of multiple actions into one.
+ */
+template <typename BinaryOp, typename Head, typename... Tail>
+class reduction final : public virtual action<typename traits<Head>::in, typename traits<Head>::out>
+{
+	static_assert(is_all_true<std::is_same<typename traits<Head>::in, typename traits<Tail>::in>::value...>::value,
+		"cannot reduce actions of different input type");
+
+	static_assert(is_all_true<std::is_same<typename traits<Head>::out, typename traits<Tail>::out>::value...>::value,
+		"cannot reduce actions of different output type");
+
+public:
+	reduction (BinaryOp op, Head head, Tail... tail)
+		: _op(op), _actions({ head, tail... })
+	{ }
+
+	typename traits<Head>::out
+	run (typename traits<Head>::in input)
+	{
+		return run(input, std::index_sequence_for<Tail...>{});
+	}
+
+private:
+	template <size_t... I>
+	typename traits<Head>::out
+	run (typename traits<Head>::in input, std::index_sequence<I...>)
+	{
+		std::vector<typename traits<Head>::out> output;
+		output.push_back(std::get<0>(_actions).run(input));
+		(output.push_back(std::get<I + 1>(_actions).run(input)), ...);
+
+		// TODO(meh): Implement this with std::reduce, or our own version of it.
+		return std::accumulate(output.begin() + 1, output.end(), output[0], _op);
+	}
+
+private:
+	BinaryOp _op;
+	std::tuple<Head, Tail...> _actions;
+};
+
+/*! Helper to create compose from a tuple.
+ */
+template <template <typename...> class Operator, typename... Action, size_t... Indices>
+Operator<Action...>
+op (std::tuple<Action...> actions, std::index_sequence<Indices...>)
+{
+	return { std::get<Indices>(actions)... };
+}
+
+template <template <typename...> class Operator, typename... Action>
+Operator<Action...>
+op (std::tuple<Action...> actions)
+{
+	return op<Operator>(actions, std::index_sequence_for<Action...>{});
+}
+
+template <template <typename, typename...> class Operator, typename BinaryOp, typename... Action, size_t... Indices>
+Operator<BinaryOp, Action...>
+op (BinaryOp bop, std::tuple<Action...> actions, std::index_sequence<Indices...>)
+{
+	return { bop, std::get<Indices>(actions)... };
+}
+
+template <template <typename, typename...> class Operator, typename BinaryOp, typename... Action>
+Operator<BinaryOp, Action...>
+op (BinaryOp bop, std::tuple<Action...> actions)
+{
+	return op<Operator>(bop, actions, std::index_sequence_for<Action...>{});
+}
+
+/*! Helper to compose actions.
+ */
+template <typename... Left, typename... Right>
+bind<Left..., Right...>
+operator>> (bind<Left...> left, bind<Right...> right)
+{
+	return op<bind>(std::tuple_cat(left.actions(), right.actions()));
+}
+
+template <typename... Left, typename Right, typename = std::enable_if_t<is_action<Right>::value>>
+bind<Left..., Right>
+operator>> (bind<Left...> left, Right right)
+{
+	return op<bind>(std::tuple_cat(left.actions(), std::make_tuple(right)));
+}
+
+template <typename Left, typename... Right, typename = std::enable_if_t<is_action<Left>::value>>
+bind<Left, Right...>
+operator>> (Left left, bind<Right...> right)
+{
+	return op<bind>(std::tuple_cat(std::make_tuple(left), right));
+}
+
+template <typename Left, typename Right, typename = std::enable_if_t<is_action<Left>::value && is_action<Right>::value>>
+bind<Left, Right>
+operator>> (Left left, Right right)
+{
+	return { left, right };
+}
+
+template <typename... Left, typename... Right>
+bind<Right..., Left...>
+operator<< (bind<Left...> left, bind<Right...> right)
+{
+	return op<bind>(std::tuple_cat(right.actions(), left.actions()));
+}
+
+template <typename... Left, typename Right>
+bind<Right, Left...>
+operator<< (bind<Left...> left, Right right)
+{
+	return op<bind>(std::tuple_cat(std::make_tuple(right), left.actions()));
+}
+
+template <typename Left, typename... Right>
+bind<Right..., Left>
+operator<< (Left left, bind<Right...> right)
+{
+	return op<bind>(std::tuple_cat(right, std::make_tuple(left)));
+}
+
+template <typename Left, typename Right, typename = std::enable_if_t<is_action<Left>::value && is_action<Right>::value>>
+bind<Right, Left>
+operator<< (Left left, Right right)
+{
+	return { right, left };
+}
+
+/*! Helper to unify action results.
+ */
+template <typename BinaryOp, typename... Left, typename... Right>
+auto
+operator+ (reduction<BinaryOp, Left...> left, reduction<BinaryOp, Right...> right)
+{
+	return op<reduction>(union_of<typename traits<nth<0, Left...>>::out>(),
+		std::tuple_cat(left.actions(), right.actions()));
+}
+
+template <typename... Left, typename Right>
+auto
+operator+ (reduction<Left...> left, Right right)
+{
+	return op<reduction>(union_of<typename traits<Right>::out>(),
+		std::tuple_cat(left.actions(), std::make_tuple(right)));
+}
+
+template <typename Left, typename... Right>
+auto
+operator+ (Left left, reduction<Right...> right)
+{
+	return op<reduction>(union_of<typename traits<Left>::out>(),
+		std::tuple_cat(std::make_tuple(left), right));
+}
+
+template <typename Left, typename Right, typename = std::enable_if_t<is_action<Left>::value && is_action<Right>::value>>
+auto
+operator+ (Left left, Right right)
+{
+	return op<reduction>(union_of<typename traits<Left>::out>(),
+		std::make_tuple(left, right));
+}
+
+template <typename BinaryOp, typename... Actions>
+auto
+reduce (BinaryOp bop, Actions... actions)
+{
+	return op<reduction>(bop, std::make_tuple(actions...));
+}
+
+} }

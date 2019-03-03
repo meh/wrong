@@ -1,0 +1,371 @@
+/** Copyleft (ɔ) meh. - http://meh.schizofreni.co
+ *
+ * This file is part of wrong - https://github.com/meh/wrong
+ *
+ * wrong is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * wrong is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+#pragma once
+
+#include <wrong/provision>
+#include <wrong/file_list>
+
+#include <wrong/action/action>
+#include <wrong/action/operators>
+#include <wrong/action/compiler>
+
+namespace wrong { namespace action {
+
+/*! Scope to change path.
+ */
+template <typename In, typename Out>
+class change_path : virtual scope<In, Out>
+{
+public:
+	change_path (std::filesystem::path to)
+		: _new(to), _old("")
+	{ }
+
+public:
+	In
+	before (In in)
+	{
+		_old = std::filesystem::current_path();
+		std::filesystem::current_path(_new);
+		return in;
+	}
+
+	Out
+	after (Out out)
+	{
+		std::filesystem::current_path(_old);
+		return out;
+	}
+
+private:
+	std::filesystem::path _new;
+	std::filesystem::path _old;
+};
+
+/*! Helper to create a change path scope.
+ */
+class current_path
+{
+public:
+	current_path (std::filesystem::path path)
+		: _path(path)
+	{ }
+
+	template <typename Action>
+	auto
+	operator>> (Action action)
+	{
+		change_path<typename traits<Action>::in, typename traits<Action>::out> scope(_path);
+		return scoped(scope, action);
+	}
+
+private:
+	std::filesystem::path _path;
+};
+
+struct source;
+auto
+sources (file_list<source> input)
+{
+	return value(input);
+}
+
+struct header;
+auto
+headers (file_list<header> input)
+{
+	return value(input);
+}
+
+struct object;
+
+auto
+objects (file_list<object> input)
+{
+	return value(input);
+}
+
+/*! An action that takes a list of files (source files) and produces a list of
+ *  files (object files).
+ *
+ * In this step the input files are checked to be up-to-date with the output
+ * files, and compilation is skipped if not needed.
+ */
+class compile final : public virtual action<file_list<source>, file_list<object>>
+{
+public:
+	compile (std::shared_ptr<compiler::base> compiler)
+		: _compiler(compiler)
+	{ }
+
+public:
+	file_list<object>
+	run (file_list<source> input)
+	{
+		std::vector<std::filesystem::path> objects;
+
+		for (auto source : input.filter(std::filesystem::current_path())) {
+			auto object = source.path();
+			object.replace_extension(".o");
+			objects.push_back(object);
+
+			std::cout << source << " -> " << object << std::endl;
+
+			auto compile = _compiler->compile(source.path(), object);
+			if (compile.status() != 0) {
+				throw "the fuck";
+			}
+		}
+
+		return objects;
+	}
+
+	/*! Add a path to the include paths.
+	 */
+	compile
+	include (std::string value)
+	{
+		_compiler->include(value);
+		return *this;
+	}
+
+	/*! Add a definition.
+	 */
+	compile
+	define (std::string name, std::string value)
+	{
+		_compiler->define(name, value);
+		return *this;
+	}
+
+	/*! Enable a definition.
+	 */
+	compile
+	define (std::string name)
+	{
+		_compiler->define(name);
+		return *this;
+	}
+
+	compile
+	language (compiler::language::specification&& spec)
+	{
+		_compiler->language(spec);
+		return *this;
+	}
+
+private:
+	std::shared_ptr<compiler::base> _compiler;
+};
+
+template <typename Compiler = compiler::gcc>
+class compile
+compile (std::shared_ptr<Compiler> compiler = std::make_shared<Compiler>())
+{
+	return { compiler };
+}
+
+/*! An action that takes a list of files (object files) and produces a program.
+ *
+ * This is the final linking step that produces a valid provision.
+ */
+class executable final : public virtual action<file_list<object>, program>
+{
+public:
+	program
+	run (file_list<object> input)
+	{
+		// TODO(meh): implement this
+		return { "" };
+	}
+
+	/*! Add a path to the library paths.
+	 */
+	executable
+	include (std::string value)
+	{
+		_flags.push_back("-L" + value);
+		return *this;
+	}
+
+	/*! Add a library to be linked.
+	 */
+	executable
+	link (std::string name)
+	{
+		_flags.push_back("-l" + name);
+		return *this;
+	}
+
+	/*! Add a library to be linked.
+	 */
+	executable
+	use (std::string path)
+	{
+		// TODO(meh): actually link it
+		return *this;
+	}
+
+private:
+	std::vector<std::string> _flags;
+};
+
+class executable
+executable ()
+{
+	return {};
+}
+
+/*! An action that takes a list of files (object files) and produces a shared
+ *  library.
+ *
+ * This is the final linking step that produces a valid provision.
+ */
+class shared final : public virtual action<file_list<object>, library>
+{
+public:
+	library
+	run (file_list<object> input)
+	{
+		// TODO(meh): implement this
+		return { false, {}, {} };
+	}
+
+	/*! Add a path to the library paths.
+	 */
+	shared
+	include (std::string value)
+	{
+		_flags.push_back("-L" + value);
+		return *this;
+	}
+
+	/*! Add a library to be linked.
+	 */
+	shared
+	link (std::string name)
+	{
+		_flags.push_back("-l" + name);
+		return *this;
+	}
+
+	/*! Add a library to be linked.
+	 */
+	shared
+	use (std::string path)
+	{
+		// TODO(meh): actually link it
+		return *this;
+	}
+
+private:
+	std::vector<std::string> _flags;
+};
+
+class shared
+shared ()
+{
+	return {};
+}
+
+/*! An action that takes a list of files (object files) and produces a static
+ *  archive.
+ *
+ * This is the final linking step that produces a valid provision.
+ */
+class archive final : public virtual action<file_list<object>, library>
+{
+public:
+	library
+	run (file_list<object> input)
+	{
+		// TODO(meh): implement this
+		return { true, {}, {} };
+	}
+
+public:
+	archive
+	headers (file_list<header> value)
+	{
+		_headers |= value;
+		return *this;
+	}
+
+private:
+	file_list<header> _headers;
+};
+
+class archive
+archive ()
+{
+	return {};
+}
+
+/*! List of required provisions.
+ */
+class requirements
+{
+public:
+	struct spec
+	{
+		std::type_info const* type;
+		std::string path;
+	};
+
+private:
+
+public:
+	explicit
+	requirements (std::vector<spec> specs = {})
+		: _specs(specs)
+	{ }
+
+	template <typename Type>
+	void
+	use (std::string path)
+	{
+		_specs.push_back(spec {
+			.type = &typeid(Type),
+			.path = path,
+		});
+	}
+
+	requirements
+	operator+ (requirements const& other)
+	{
+		requirements result(_specs);
+		result._specs.insert(result._specs.end(), other._specs.begin(), other._specs.end());
+		return result;
+	}
+
+private:
+	std::vector<spec> _specs;
+};
+
+template <typename Type>
+requirements
+use (std::string path)
+{
+	requirements r;
+	r.use<Type>(path);
+
+	return r;
+}
+
+} }

@@ -1,0 +1,198 @@
+/** Copyleft (ɔ) meh. - http://meh.schizofreni.co
+ *
+ * This file is part of wrong - https://github.com/meh/wrong
+ *
+ * wrong is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * wrong is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+#pragma once
+
+#include <string>
+#include <vector>
+#include <optional>
+#include <filesystem>
+
+#include <wrong/provision>
+#include <wrong/util>
+
+namespace wrong { namespace action { namespace compiler {
+
+namespace language
+{
+	/*! The language type.
+	 */
+	enum class type
+	{
+		c,
+		cxx,
+	};
+
+	/*! The specification to pick a language for the compiler.
+	 */
+	struct specification
+	{
+		/*! The language type.
+		 */
+		enum type language;
+
+		/*! The language standard, or the default.
+		 */
+		std::optional<std::string> standard;
+	};
+
+	template <size_t Version = 0>
+	struct c
+	{ };
+
+	template <size_t Version = 0>
+	struct cxx
+	{ };
+}
+
+class base
+{
+public:
+	virtual ~base()
+	{ }
+
+	/*! Compile the `input` into `output`.
+	 */
+	virtual program::process compile (std::filesystem::path input, std::filesystem::path output) = 0;
+
+	/*! Add a path to the include paths.
+	 */
+	virtual void include (std::string value) = 0;
+
+	/*! Add a definition.
+	 */
+	virtual void define (std::string name, std::string value) = 0;
+
+	/*! Enable a definition.
+	 */
+	virtual void define (std::string name) = 0;
+
+	/*! Set what language to use.
+	 */
+	virtual void language (language::specification spec) = 0;
+};
+
+class gcc : public base
+{
+public:
+	gcc () : _flags()
+	{ }
+
+public:
+	program::process
+	compile (std::filesystem::path input, std::filesystem::path output) override
+	{
+		return program::which("gcc").value().run({ "-o", output, input });
+	}
+
+	void
+	include (std::string value) override
+	{
+		_flags.push_back("-I" + value);
+	}
+
+	/*! Add a definition.
+	 */
+	void
+	define (std::string name, std::string value) override
+	{
+		_flags.push_back("-D" + name + "=" + value);
+	}
+
+	/*! Enable a definition.
+	 */
+	void
+	define (std::string name) override
+	{
+		_flags.push_back("-D" + name + "=1");
+	}
+
+	void
+	language (language::specification spec) override
+	{
+		if (spec.standard) {
+			_flags.push_back("-std=" + spec.standard.value());
+		}
+
+		if (spec.language == language::type::c) {
+			_executable = "gcc";
+		}
+		else if (spec.language == language::type::cxx) {
+			_executable = "g++";
+		}
+	}
+
+private:
+	std::string _executable;
+	std::vector<std::string> _flags;
+};
+
+class clang : public base
+{
+public:
+	clang ()
+		: _executable("clang"), _flags()
+	{ }
+
+public:
+	void
+	include (std::string value) override
+	{
+		_flags.push_back("-I" + value);
+	}
+
+	/*! Add a definition.
+	 */
+	void
+	define (std::string name, std::string value) override
+	{
+		_flags.push_back("-D" + name + "=" + value);
+	}
+
+	/*! Enable a definition.
+	 */
+	void
+	define (std::string name) override
+	{
+		_flags.push_back("-D" + name + "=1");
+	}
+
+	void
+	language (language::specification spec) override
+	{
+		if (spec.standard) {
+			_flags.push_back("-std=" + spec.standard.value());
+		}
+
+		if (spec.language == language::type::c) {
+			_executable = "clang";
+		}
+		else if (spec.language == language::type::cxx) {
+			_executable = "clang++";
+		}
+	}
+
+private:
+	std::string _executable;
+	std::vector<std::string> _flags;
+};
+
+} } }
+
+// TODO(meh): Remove _executable, save version for C and C++ separately, add
+// setting for root for the compiler, then stuff

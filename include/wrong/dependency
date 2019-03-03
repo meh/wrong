@@ -22,10 +22,11 @@
 #include <string>
 #include <memory>
 #include <unordered_map>
+#include <filesystem>
 
 #include <wrong/place>
 #include <wrong/provision>
-#include <wrong/action>
+#include <wrong/action/action>
 
 namespace wrong {
 
@@ -46,7 +47,7 @@ public:
 		provision (std::string name, Action action)
 			: _name(name)
 		{
-			struct variant : public action::base<typename action::traits<Action>::out, type>
+			struct variant : public action::action<typename action::traits<Action>::out, type>
 			{
 				type
 				run (typename action::traits<Action>::out output)
@@ -83,7 +84,7 @@ public:
 
 		/*! The action to build the provision.
 		 */
-		std::unique_ptr<action::base<action::nothing, type>> _action;
+		std::unique_ptr<action::action<action::nothing, type>> _action;
 	};
 
 public:
