@@ -18,10 +18,11 @@
 
 #pragma once
 
-#include <glob.h>
+#include <fnmatch.h>
 #include <vector>
 #include <filesystem>
 #include <functional>
+#include <regex>
 
 #include <wrong/util>
 
@@ -41,13 +42,20 @@ public:
 	public:
 		matcher (std::string pred)
 			: _predicate([pred](auto& path) {
-				return true;
+				// TODO(meh): Implement this in C++
+				return fnmatch(pred.c_str(), path.c_str(), FNM_PATHNAME | FNM_PERIOD) == 0;
 			})
 		{ }
 
 		matcher (predicate pred)
 			: _predicate(pred)
 		{ }
+
+		bool
+		matches (std::filesystem::path path) const
+		{
+			return _predicate(path);
+		}
 
 	private:
 		predicate _predicate;
@@ -63,9 +71,69 @@ public:
 		using iterator_category = directory_iterator::iterator_category;
 
 	public:
-		iterator (directory_iterator inner, std::vector<matcher> const& include, std::vector<matcher> const& exclude)
-			: _inner(inner), _include(include), _exclude(exclude)
+		iterator (std::filesystem::path root, std::vector<matcher> const& include, std::vector<matcher> const& exclude)
+			: iterator(root, include, exclude, directory_iterator(
+					root, std::filesystem::directory_options::skip_permission_denied))
 		{ }
+
+		iterator (std::filesystem::path root, std::vector<matcher> const& include, std::vector<matcher> const& exclude, directory_iterator iter)
+			: _root(root), _include(include), _exclude(exclude), _inner(iter)
+		{
+			find_matching();
+		}
+
+		bool
+		matches (std::filesystem::path path)
+		{
+			// By default all files in a file list are ignored.
+			bool matches = false;
+
+			// First check if the path is included by anything, at the first valid
+			// inclusion, mark it as matching and bail out.
+			for (auto& include : _include) {
+				if (include.matches(path)) {
+					matches = true;
+					break;
+				}
+			}
+
+			// Then if anything was included go through exclusions until one excludes
+			// the path.
+			if (matches) {
+				for (auto& exclude : _exclude) {
+					if (!matches) {
+						break;
+					}
+
+					if (exclude.matches(path)) {
+						matches = false;
+						break;
+					}
+				}
+			}
+
+			return matches;
+		}
+
+		void
+		find_matching ()
+		{
+			while (_inner != std::filesystem::end(_inner) && !matches(_inner->path().lexically_relative(_root))) {
+				++_inner;
+			}
+		}
+
+		iterator
+		begin ()
+		{
+			return { _root, _include, _exclude, std::filesystem::begin(_inner) };
+		}
+
+		iterator
+		end ()
+		{
+			return { _root, _include, _exclude, std::filesystem::end(_inner) };
+		}
 
 		value_type
 		operator * () const
@@ -85,22 +153,42 @@ public:
 			return !(*this == other);
 		}
 
+		value_type
+		operator++ (int)
+		{
+			++_inner;
+			find_matching();
+			return *_inner;
+		}
+
+		iterator&
+		operator++ ()
+		{
+			++_inner;
+			find_matching();
+			return *this;
+		}
+
 	private:
-		directory_iterator          _inner;
+		std::filesystem::path       _root;
 		std::vector<matcher> const& _include;
 		std::vector<matcher> const& _exclude;
+
+		directory_iterator _inner;
 	};
 
 public:
 	file_list ()
 	{ }
 
-	file_list (std::initializer_list<std::string> args)
+	template <typename Matcher>
+	file_list (std::vector<Matcher> args)
 	{
 		include(args);
 	}
 
-	file_list (std::initializer_list<matcher> args)
+	template <typename Matcher>
+	file_list (std::initializer_list<Matcher> args)
 	{
 		include(args);
 	}
@@ -108,10 +196,32 @@ public:
 public:
 	template <typename Matcher>
 	file_list<Tag>&
+	include (std::vector<Matcher> args)
+	{
+		for (auto arg : args) {
+			_include.push_back(matcher(arg));
+		}
+
+		return *this;
+	}
+
+	template <typename Matcher>
+	file_list<Tag>&
 	include (std::initializer_list<Matcher> args)
 	{
 		for (auto arg : args) {
-			_include.push_back(std::move(arg));
+			_include.push_back(matcher(arg));
+		}
+
+		return *this;
+	}
+
+	template <typename Matcher>
+	file_list<Tag>&
+	exclude (std::vector<Matcher> args)
+	{
+		for (auto arg : args) {
+			_exclude.push_back(matcher(arg));
 		}
 
 		return *this;
@@ -122,16 +232,16 @@ public:
 	exclude (std::initializer_list<Matcher> args)
 	{
 		for (auto arg : args) {
-			_exclude.push_back(std::move(arg));
+			_exclude.push_back(matcher(arg));
 		}
 
 		return *this;
 	}
 
 	iterator
-	iterator (std::filesystem::path& path)
+	filter (std::filesystem::path path)
 	{
-		return { directory_iterator(path), _include, _exclude };
+		return { path, _include, _exclude };
 	}
 
 	template <typename Matcher>
