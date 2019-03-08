@@ -18,6 +18,8 @@
 
 #pragma once
 
+#include <cstdlib>
+
 #include <wrong/provision>
 #include <wrong/file_list>
 
@@ -366,6 +368,34 @@ class archive
 archive ()
 {
 	return {};
+}
+
+class env final : public virtual action<nothing, std::optional<std::string>>
+{
+public:
+	env (std::string name)
+		: _name(name)
+	{ }
+
+	std::optional<std::string>
+	operator() (nothing _)
+	{
+		if (auto value = std::getenv(_name.c_str()); value != nullptr) {
+			return std::string(value);
+		}
+		else {
+			return {};
+		}
+	}
+
+private:
+	std::string _name;
+};
+
+class env
+env (std::string name)
+{
+	return { name };
 }
 
 /*! List of required provisions.
