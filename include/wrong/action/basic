@@ -140,7 +140,7 @@ public:
 
 public:
 	file_list<object>
-	run (file_list<source> input)
+	operator() (file_list<source> input)
 	{
 		std::vector<std::filesystem::path> objects;
 
@@ -240,7 +240,7 @@ class executable final : public virtual action<file_list<object>, program>
 {
 public:
 	program
-	run (file_list<object> input)
+	operator() (file_list<object> input)
 	{
 		// TODO(meh): implement this
 		return { "" };
@@ -292,7 +292,7 @@ class shared final : public virtual action<file_list<object>, library>
 {
 public:
 	library
-	run (file_list<object> input)
+	operator() (file_list<object> input)
 	{
 		// TODO(meh): implement this
 		return { false, {}, {} };
@@ -344,7 +344,7 @@ class archive final : public virtual action<file_list<object>, library>
 {
 public:
 	library
-	run (file_list<object> input)
+	operator() (file_list<object> input)
 	{
 		// TODO(meh): implement this
 		return { true, {}, {} };

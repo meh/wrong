@@ -72,7 +72,7 @@ public:
 	{ }
 
 	typename traits<nth<sizeof...(Tail) - 1, Tail...>>::out
-	run (typename traits<Head>::in input)
+	operator() (typename traits<Head>::in input)
 	{
 		return _run<typename traits<nth<sizeof...(Tail) - 1, Tail...>>::out,
 			0, Head, Tail...>(input);
@@ -89,14 +89,14 @@ private:
 	Out
 	_run (typename traits<First>::in input)
 	{
-		return std::get<I>(_actions).run(input);
+		return std::invoke(std::get<I>(_actions), input);
 	}
 
 	template <typename Out, size_t I, typename First, typename Second, typename... Rest>
 	Out
 	_run (typename traits<First>::in input)
 	{
-		return _run<Out, I + 1, Second, Rest...>(std::get<I>(_actions).run(input));
+		return _run<Out, I + 1, Second, Rest...>(std::invoke(std::get<I>(_actions), input));
 	}
 
 private:
@@ -113,9 +113,9 @@ public:
 	{ }
 
 	typename traits<std::invoke_result_t<Right, typename traits<Left>::out>>::out
-	run (typename traits<Left>::in input)
+	operator() (typename traits<Left>::in input)
 	{
-		return std::invoke(_right, _left.run(input)).run({});
+		return std::invoke(std::invoke(_right, std::invoke(_left, input)), nothing());
 	}
 
 private:
@@ -140,19 +140,19 @@ public:
 	{ }
 
 	typename traits<Head>::out
-	run (typename traits<Head>::in input)
+	operator() (typename traits<Head>::in input)
 	{
-		return run(input, std::index_sequence_for<Tail...>{});
+		return _run(input, std::index_sequence_for<Tail...>{});
 	}
 
 private:
 	template <size_t... I>
 	typename traits<Head>::out
-	run (typename traits<Head>::in input, std::index_sequence<I...>)
+	_run (typename traits<Head>::in input, std::index_sequence<I...>)
 	{
 		std::vector<typename traits<Head>::out> output;
-		output.push_back(std::get<0>(_actions).run(input));
-		(output.push_back(std::get<I + 1>(_actions).run(input)), ...);
+		output.push_back(std::invoke(std::get<0>(_actions), input));
+		(output.push_back(std::invoke(std::get<I + 1>(_actions), input)), ...);
 
 		// TODO(meh): Implement this with std::reduce, or our own version of it.
 		return std::accumulate(output.begin() + 1, output.end(), output[0], _op);
@@ -259,7 +259,8 @@ operator+ (Left left, reduction<Right...> right)
 		std::tuple_cat(std::make_tuple(left), right));
 }
 
-template <typename Left, typename Right, typename = std::enable_if_t<is_action<Left>::value && is_action<Right>::value>>
+template <typename Left, typename Right,
+	typename = std::enable_if_t<is_action<Left>::value && is_action<Right>::value>>
 auto
 operator+ (Left left, Right right)
 {

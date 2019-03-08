@@ -36,12 +36,6 @@ struct action
 	/*! The output type of the action.
 	 */
 	using out = Out;
-
-	/*! Executes the action with the given input and returns the given output.
-	 */
-	virtual Out run (In input) = 0;
-
-	virtual ~action () { }
 };
 
 template <typename In, typename Out>
@@ -109,9 +103,9 @@ public:
 
 public:
 	typename traits<Action>::out
-	run (typename traits<Action>::in in)
+	operator() (typename traits<Action>::in in)
 	{
-		return _scope.after(_action.run(_scope.before(in)));
+		return _scope.after(std::invoke(_action, _scope.before(in)));
 	}
 
 private:
@@ -142,7 +136,13 @@ public:
 	{ }
 
 	Value
-	run (nothing _)
+	operator() ()
+	{
+		return _value;
+	}
+
+	Value
+	operator() (nothing _)
 	{
 		return _value;
 	}
@@ -151,47 +151,28 @@ protected:
 	Value _value;
 };
 
-/*! Trick to put an action into a pointer.
- */
-template <typename Action>
-class identity : public virtual action<typename traits<Action>::in, typename traits<Action>::out>
-{
-public:
-	identity (Action action)
-		: _action(action)
-	{ }
-
-	typename traits<Action>::out
-	run (typename traits<Action>::in input)
-	{
-		return _action.run(input);
-	}
-
-private:
-	Action _action;
-};
-
 /*! Turn a function into an action.
  *
  * What this allows is to turn a normal function into an action, making it
  * usable within the rest of the system.
  */
-template <typename In, typename Out>
-class function : public virtual action<In, Out>
+template <typename In, typename Out, typename Callable, typename = std::enable_if_t<
+	std::is_invocable_v<Callable, Out, In>>>
+class callable : public virtual action<In, Out>
 {
 public:
-	function (std::function<Out(In)> fun)
+	callable (Callable fun)
 		: _fun(fun)
 	{ }
 
 	Out
-	run (In input)
+	operator() (In input)
 	{
 		return _fun(input);
 	}
 
 private:
-	std::function<Out(In)> _fun;
+	Callable _fun;
 };
 
 /*! Turn a value into an action.
@@ -203,20 +184,11 @@ value (Value value)
 	return value;
 }
 
-/*! Helper to create an std::unique_ptr out of any action.
- */
-template <typename Action>
-std::unique_ptr<action<typename traits<Action>::in, typename traits<Action>::out>>
-as_ptr (Action action)
-{
-	return std::make_unique<identity<Action>>(action);
-}
-
 /*! Create an action out of any function.
  */
-template <typename In, typename Out>
-function<In, Out>
-then (std::function<Out(In)> fun)
+template <typename In, typename Out, typename Callable>
+callable<In, Out, Callable>
+then (Callable fun)
 {
 	return { fun };
 }

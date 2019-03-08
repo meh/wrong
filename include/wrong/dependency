@@ -47,16 +47,16 @@ public:
 		provision (std::string name, Action action)
 			: _name(name)
 		{
-			struct variant : public action::action<typename action::traits<Action>::out, type>
+			struct variant : public virtual action::action<typename action::traits<Action>::out, type>
 			{
 				type
-				run (typename action::traits<Action>::out output)
+				operator() (typename action::traits<Action>::out output)
 				{
 					return output;
 				}
 			};
 
-			_action = action::as_ptr(action >> variant());
+			_action = action >> variant();
 		}
 
 		/*! Get the name of the provision.
@@ -73,7 +73,7 @@ public:
 		get_future ()
 		{
 			return std::async(std::launch::async, [this]() {
-				return _action->run(action::nothing());
+				return std::invoke(_action, action::nothing());
 			});
 		}
 
@@ -84,7 +84,7 @@ public:
 
 		/*! The action to build the provision.
 		 */
-		std::unique_ptr<action::action<action::nothing, type>> _action;
+		std::function<type(action::nothing)> _action;
 	};
 
 public:
