@@ -28,15 +28,25 @@ namespace wrong { namespace place {
 class base
 {
 public:
-	virtual ~base () { }
+	virtual
+	~base () { }
 
 	/*! The absolute path to the place where things are.
 	 */
-	virtual std::filesystem::path path () const = 0;
+	virtual
+	std::filesystem::path
+	path () const = 0;
 
 	/*! Find the place.
+	 *
+	 * Download, fetch, clone, pull, update, whatever.
 	 */
-	virtual int find () = 0;
+	virtual
+	int
+	find ()
+	{
+		return 0;
+	}
 };
 
 /*! There's actually no place.
@@ -58,13 +68,13 @@ public:
 
 public:
 	std::filesystem::path
-	path () const
+	path () const override
 	{
 		return "";
 	}
 
 	int
-	find ()
+	find () override
 	{
 		return 0;
 	}
@@ -101,13 +111,13 @@ private:
 
 public:
 	std::filesystem::path
-	path () const
+	path () const override
 	{
-		return "";
+		return _path;
 	}
 
 	int
-	find ()
+	find () override
 	{
 		return 0;
 	}
@@ -160,13 +170,13 @@ private:
 
 public:
 	std::filesystem::path
-	path () const
+	path () const override
 	{
 		return "";
 	}
 
 	int
-	find ()
+	find () override
 	{
 		return 0;
 	}

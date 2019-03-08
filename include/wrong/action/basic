@@ -79,26 +79,50 @@ private:
 	std::filesystem::path _path;
 };
 
+template <typename Tag>
+class files : public unit<file_list<Tag>>
+{
+public:
+	using unit<file_list<Tag>>::unit;
+
+	template <typename Matcher>
+	files<Tag>&
+	include (std::initializer_list<Matcher> filter)
+	{
+		this->_value.include(filter);
+		return *this;
+	}
+
+	template <typename Matcher>
+	files<Tag>&
+	exclude (std::initializer_list<Matcher> filter)
+	{
+		this->_value.exclude(filter);
+		return *this;
+	}
+};
+
+struct assembly;
 struct source;
-auto
-sources (file_list<source> input)
-{
-	return value(input);
-}
-
 struct header;
-auto
-headers (file_list<header> input)
-{
-	return value(input);
-}
-
 struct object;
 
-auto
+files<source>
+sources (file_list<source> input)
+{
+	return input;
+}
+
+files<header>
+headers (file_list<header> input)
+{
+	return input;
+}
+
+files<object>
 objects (file_list<object> input)
 {
-	return value(input);
+	return input;
 }
 
 /*! An action that takes a list of files (source files) and produces a list of
@@ -125,8 +149,6 @@ public:
 			object.replace_extension(".o");
 			objects.push_back(object);
 
-			std::cout << source << " -> " << object << std::endl;
-
 			auto compile = _compiler->compile(source.path(), object);
 			if (compile.status() != 0) {
 				throw "the fuck";
@@ -136,12 +158,30 @@ public:
 		return objects;
 	}
 
+	/*! Set what language to use.
+	 */
+	compile
+	language (compiler::language::specification&& spec)
+	{
+		_compiler->language(spec);
+		return *this;
+	}
+
+	/*! Specify the target to compile for.
+	 */
+	compile
+	target (std::string triple)
+	{
+		_compiler->target(triple);
+		return *this;
+	}
+
 	/*! Add a path to the include paths.
 	 */
 	compile
-	include (std::string value)
+	include (std::initializer_list<std::string> values)
 	{
-		_compiler->include(value);
+		_compiler->include(values);
 		return *this;
 	}
 
@@ -163,10 +203,21 @@ public:
 		return *this;
 	}
 
+	/*! Set a custom flag.
+	 */
 	compile
-	language (compiler::language::specification&& spec)
+	flag (std::string name, std::string value)
 	{
-		_compiler->language(spec);
+		_compiler->flag(name, value);
+		return *this;
+	}
+
+	/*! Set a custom flag.
+	 */
+	compile
+	flag (std::string name)
+	{
+		_compiler->flag(name);
 		return *this;
 	}
 

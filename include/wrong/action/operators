@@ -193,7 +193,7 @@ template <typename Left, typename... Right, typename = std::enable_if_t<is_actio
 bind<Left, Right...>
 operator>> (Left left, bind<Right...> right)
 {
-	return op<bind>(std::tuple_cat(std::make_tuple(left), right));
+	return op<bind>(std::tuple_cat(std::make_tuple(left), right.actions()));
 }
 
 template <typename Left, typename Right, typename = std::enable_if_t<is_action<Left>::value && is_action<Right>::value>>

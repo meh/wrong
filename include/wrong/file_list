@@ -101,10 +101,6 @@ public:
 			// the path.
 			if (matches) {
 				for (auto& exclude : _exclude) {
-					if (!matches) {
-						break;
-					}
-
 					if (exclude.matches(path)) {
 						matches = false;
 						break;

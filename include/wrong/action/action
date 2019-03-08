@@ -20,6 +20,7 @@
 
 #include <functional>
 #include <numeric>
+#include <memory>
 
 namespace wrong { namespace action {
 
@@ -133,7 +134,7 @@ struct nothing
 /*! Turn a value into an action.
  */
 template <typename Value>
-class unit final : public virtual action<nothing, Value>
+class unit : public virtual action<nothing, Value>
 {
 public:
 	unit (Value value)
@@ -146,14 +147,14 @@ public:
 		return _value;
 	}
 
-private:
+protected:
 	Value _value;
 };
 
 /*! Trick to put an action into a pointer.
  */
 template <typename Action>
-class identity final : public virtual action<typename traits<Action>::in, typename traits<Action>::out>
+class identity : public virtual action<typename traits<Action>::in, typename traits<Action>::out>
 {
 public:
 	identity (Action action)
@@ -176,7 +177,7 @@ private:
  * usable within the rest of the system.
  */
 template <typename In, typename Out>
-class function final : public virtual action<In, Out>
+class function : public virtual action<In, Out>
 {
 public:
 	function (std::function<Out(In)> fun)

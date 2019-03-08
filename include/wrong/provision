@@ -208,7 +208,7 @@ public:
 	/*! Run the program with the given arguments.
 	 */
 	process
-	run (std::initializer_list<std::string> args = {}) const
+	run (std::vector<std::string> args = {}) const
 	{
 		std::ostringstream cmd(_path, std::ios_base::ate);
 

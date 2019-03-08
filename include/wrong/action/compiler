@@ -22,6 +22,7 @@
 #include <vector>
 #include <optional>
 #include <filesystem>
+#include <stdexcept>
 
 #include <wrong/provision>
 #include <wrong/util>
@@ -51,13 +52,41 @@ namespace language
 		std::optional<std::string> standard;
 	};
 
-	template <size_t Version = 0>
-	struct c
-	{ };
+	specification
+	c ()
+	{
+		return { .language = type::c, .standard = {} };
+	}
 
-	template <size_t Version = 0>
-	struct cxx
-	{ };
+	specification
+	c (int version)
+	{
+		return { .language = type::c, .standard = fmt::format("c{}", version) };
+	}
+
+	specification
+	c (std::string version)
+	{
+		return { .language = type::c, .standard = fmt::format("{}", version) };
+	}
+
+	specification
+	cxx ()
+	{
+		return { .language = type::c, .standard = {} };
+	}
+
+	specification
+	cxx (int version)
+	{
+		return { .language = type::c, .standard = fmt::format("c++{}", version) };
+	}
+
+	specification
+	cxx (std::string version)
+	{
+		return { .language = type::c, .standard = fmt::format("{}", version) };
+	}
 }
 
 class base
@@ -70,9 +99,17 @@ public:
 	 */
 	virtual program::process compile (std::filesystem::path input, std::filesystem::path output) = 0;
 
+	/*! Set what language to use.
+	 */
+	virtual void language (language::specification spec) = 0;
+
+	/*! Specify the target to compile for.
+	 */
+	virtual void target (std::string triple) = 0;
+
 	/*! Add a path to the include paths.
 	 */
-	virtual void include (std::string value) = 0;
+	virtual void include (std::initializer_list<std::string> values) = 0;
 
 	/*! Add a definition.
 	 */
@@ -82,40 +119,88 @@ public:
 	 */
 	virtual void define (std::string name) = 0;
 
-	/*! Set what language to use.
+	/*! Set a custom flag.
 	 */
-	virtual void language (language::specification spec) = 0;
+	virtual void flag (std::string name, std::string value) = 0;
+
+	/*! Set a custom flag.
+	 */
+	virtual void flag (std::string name) = 0;
 };
 
 class gcc : public base
 {
 public:
-	gcc () : _flags()
-	{ }
-
-public:
 	program::process
 	compile (std::filesystem::path input, std::filesystem::path output) override
 	{
-		return program::which("gcc").value().run({ "-o", output, input });
+		// Create the binary name for GCC based on the language specification and
+		// target name.
+		std::string compiler;
+		{
+			if (_target) {
+				compiler += _target.value() + "-";
+			}
+
+			if (_language.language == language::type::c) {
+				compiler += "gcc";
+			}
+			else if (_language.language == language::type::cxx) {
+				compiler += "g++";
+			}
+		}
+
+		// As arguments to the compiler first pass the user defined flags, then the
+		// language standard, then the output, and finally the input.
+		std::vector<std::string> args;
+		{
+			args.insert(args.end(), _flags.begin(), _flags.end());
+
+			if (_language.standard) {
+				args.push_back("-std=" + _language.standard.value());
+			}
+
+			auto dependency = output;
+			dependency.replace_extension(".d");
+
+			args.insert(args.end(),
+				{ "-MMD", "-MP", "-MF", dependency, "-o", output, "-c", input });
+		}
+
+		// Create a provision for the compiler and run it.
+		if (auto bin = program::which(compiler); bin) {
+			return bin.value().run(args);
+		}
+
+		throw std::runtime_error(fmt::format("compiler not found: {}", compiler));
 	}
 
 	void
-	include (std::string value) override
+	language (language::specification spec) override
 	{
-		_flags.push_back("-I" + value);
+		_language = spec;
 	}
 
-	/*! Add a definition.
-	 */
+	void
+	target (std::string triple) override
+	{
+		_target = triple;
+	}
+
+	void
+	include (std::initializer_list<std::string> values) override
+	{
+		for (auto& value : values) {
+			_flags.push_back("-I" + value);
+		}
+	}
+
 	void
 	define (std::string name, std::string value) override
 	{
 		_flags.push_back("-D" + name + "=" + value);
 	}
 
-	/*! Enable a definition.
-	 */
 	void
 	define (std::string name) override
 	{
@@ -123,72 +208,20 @@ public:
 	}
 
 	void
-	language (language::specification spec) override
+	flag (std::string name, std::string value) override
 	{
-		if (spec.standard) {
-			_flags.push_back("-std=" + spec.standard.value());
-		}
+		_flags.push_back(fmt::format("-{}={}", name, value));
+	}
 
-		if (spec.language == language::type::c) {
-			_executable = "gcc";
-		}
-		else if (spec.language == language::type::cxx) {
-			_executable = "g++";
-		}
+	void
+	flag (std::string name) override
+	{
+		_flags.push_back(fmt::format("-{}", name));
 	}
 
 private:
-	std::string _executable;
-	std::vector<std::string> _flags;
-};
-
-class clang : public base
-{
-public:
-	clang ()
-		: _executable("clang"), _flags()
-	{ }
-
-public:
-	void
-	include (std::string value) override
-	{
-		_flags.push_back("-I" + value);
-	}
-
-	/*! Add a definition.
-	 */
-	void
-	define (std::string name, std::string value) override
-	{
-		_flags.push_back("-D" + name + "=" + value);
-	}
-
-	/*! Enable a definition.
-	 */
-	void
-	define (std::string name) override
-	{
-		_flags.push_back("-D" + name + "=1");
-	}
-
-	void
-	language (language::specification spec) override
-	{
-		if (spec.standard) {
-			_flags.push_back("-std=" + spec.standard.value());
-		}
-
-		if (spec.language == language::type::c) {
-			_executable = "clang";
-		}
-		else if (spec.language == language::type::cxx) {
-			_executable = "clang++";
-		}
-	}
-
-private:
-	std::string _executable;
+	language::specification _language;
+	std::optional<std::string> _target;
 	std::vector<std::string> _flags;
 };
 
