@@ -124,6 +124,8 @@ public:
 		process (std::string cmd)
 			: _pipe(pclose)
 		{
+			spdlog::debug("{}", cmd);
+
 			if (auto pipe = popen(cmd.c_str(), "r"); pipe != nullptr) {
 				_pipe.file(pipe);
 			}

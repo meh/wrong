@@ -27,6 +27,7 @@
 #include <array>
 #include <tuple>
 #include <vector>
+#include <spdlog/spdlog.h>
 
 namespace wrong {
 
