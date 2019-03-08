@@ -163,6 +163,43 @@ private:
 	std::tuple<Head, Tail...> _actions;
 };
 
+template <typename Head, typename... Tail>
+class collect final : public virtual action<typename traits<Head>::in, std::tuple<typename traits<Head>::out, typename traits<Tail>::out...>>
+{
+	static_assert(sizeof...(Tail) >= 1, "unary collect makes no sense");
+
+	static_assert(is_all_true<std::is_convertible<typename traits<Head>::in, typename traits<Tail>::in>::value...>::value,
+		"cannot collect actions of different input type");
+
+public:
+	collect (Head head, Tail... tail)
+		: _actions({ head, tail... })
+	{ }
+
+	std::tuple<typename traits<Head>::out, typename traits<Tail>::out...>
+	operator() (typename traits<Head>::in input)
+	{
+		return _run(input, std::index_sequence_for<Head, Tail...>{});
+	}
+
+	std::tuple<Head, Tail...>&
+	actions ()
+	{
+		return _actions;
+	}
+
+private:
+	template <size_t... I>
+	std::tuple<typename traits<Head>::out, typename traits<Tail>::out...>
+	_run (typename traits<Head>::in input, std::index_sequence<I...>)
+	{
+		return std::make_tuple(std::invoke(std::get<I>(_actions), input)...);
+	}
+
+private:
+	std::tuple<Head, Tail...> _actions;
+};
+
 /*! Helper to create compose from a tuple.
  */
 template <template <typename...> class Operator, typename... Action, size_t... Indices>
@@ -274,5 +311,37 @@ reduce (BinaryOp bop, Actions... actions)
 {
 	return op<reduction>(bop, std::make_tuple(actions...));
 }
+
+template <typename... Left, typename... Right>
+collect<Left..., Right...>
+operator, (collect<Left...> left, collect<Right...> right)
+{
+	return op<collect>(std::tuple_cat(left.actions(), right.actions()));
+}
+
+template <typename... Left, typename Right,
+	typename = std::enable_if_t<is_action<Right>::value>>
+collect<Left..., Right>
+operator, (collect<Left...> left, Right right)
+{
+	return op<collect>(std::tuple_cat(left.actions(), std::make_tuple(right)));
+}
+
+template <typename Left, typename... Right,
+	typename = std::enable_if_t<is_action<Left>::value>>
+collect<Left, Right...>
+operator, (Left left, collect<Right...> right)
+{
+	return op<collect>(std::tuple_cat(std::make_tuple(left), right.actions()));
+}
+
+template <typename Left, typename Right,
+	typename = std::enable_if_t<is_action<Left>::value && is_action<Right>::value>>
+collect<Left, Right>
+operator, (Left left, Right right)
+{
+	return { left, right };
+}
+
 
 } }
