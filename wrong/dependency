@@ -111,6 +111,9 @@ public:
 		static_assert(std::is_same<typename action::traits<Action>::out, Provision>::value,
 			"The action does not return the right type of provision");
 
+		std::filesystem::current_path(_place->path());
+		std::invoke(action, action::nothing());
+
 		provision provided(name, action);
 		_provisions.insert({ std::move(name), std::move(provided) });
 
