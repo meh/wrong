@@ -5,7 +5,24 @@ Every single build system for C/C++ is wrong, especially this one.
 Example
 =======
 ```cpp
+#include <wrong/mistake>
 
+using namespace wrong;
+using namespace wrong::action;
+
+int
+main ()
+{
+	mistake my;
+
+	// Build a C++ executable called "wrongest".
+	auto wrongest = my.program("wrongest",
+		sources("src/*.cpp") >>
+		compile().flag("Os").language(compiler::language::cxx(17)) >>
+		executable());
+
+	return wrongest.build();
+}
 ```
 
 What grinds my gears
