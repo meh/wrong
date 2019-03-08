@@ -3,35 +3,80 @@
 using namespace wrong;
 using namespace wrong::action;
 
+namespace build {
+	template <typename Action>
+	auto
+	debug (Action compiler)
+	{
+		return compiler
+			.flag("O0")
+			.flag("g3")
+			.flag("gdwarf-2")
+			.define("DEBUG");
+	}
+
+	template <typename Action>
+	auto
+	release (Action compiler)
+	{
+		return compiler
+			.flag("O3")
+			.define("NDEBUG");
+	}
+
+	auto
+	compiler (bool is_release = false)
+	{
+		auto common = compile()
+			.target("arm-none-eabi")
+			.flag("fdata-sections")
+			.flag("mcpu", "cortex-m4")
+			.flag("mthumb");
+
+		return is_release ? debug(common) : release(common);
+	}
+}
+
+auto
+cc (bool is_release = false)
+{
+	return build::compiler(is_release)
+		.language(compiler::language::c("gnu11"));
+}
+
+auto
+cxx (bool is_release = false)
+{
+	return build::compiler(is_release)
+		.flag("fno-exceptions").flag("fno-rtti")
+		.language(compiler::language::cxx("c++2a"));
+}
+
 int
 main ()
 {
 	mistake my;
 
-	my.dependency("foo")
+	my.dependency("gecko-sdk")
 		.place(place::git()
-			.remote("https://github.com/meh/wrong")
-			.root("example/foo"))
-		.provides<program>("foo",
-			((sources({ "source/*.cpp" })
-				>> compile().include("include").define("BLA_BLA"))
-			+(sources({ "source/bla/*.c" })
-				>> compile().include("include/bla")))
-			>> executable().use("bar::bar").link("m"));
+			.remote("https://github.com/SiliconLabs/Gecko_SDK"))
+		.provides<library>("emlib",
+			current_path("platform/emlib") >> (
+				value(3) >>= [](auto v) {
+					std::cout << v << std::endl;
 
-	my.dependency("bar")
-		.place(place::local()
-			.path("example/bar"))
-		.provides<library>("bar",
-			   sources({ "source/*.cpp" })
-			>> compile().include("include/bar")
-			>> archive());
+					return sources({ "src/*.c" }) >>
+					       cc().include({ "inc" }) >>
+					       archive().headers({ "inc/*.h" });
+				}))
+		.provides<library>("mbedtls",
+			current_path("util/third_party/mbedtls") >> (
+				sources({ "library/*.c", "sl_crypto/src/{aes,crypto}_*.c" })
+				>> cc()
+					.define("MBEDTLS_CONFIG_FILE", "'\"config_mbedtls.h\"'")
+					.include({ "configs", "include", "sl_crypto/include" })
+				>> archive()
+					.headers({ "include/*", "sl_crypto/include" })));
 
-//	my.program("bar")
-//		// NOTE(meh): This adds a `prepare<provision>` to a list of required
-//		//            provisions, which will then be built, it's essentially
-//		//            a future.
-//		.requires<program>("foo::foo");
-//
-//	return my.build("foo");
+	return 0;
 }
