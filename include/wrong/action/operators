@@ -103,6 +103,26 @@ private:
 	std::tuple<Head, Tail...> _actions;
 };
 
+template <typename Left, typename Right>
+class bind_with final : public virtual action<typename traits<Left>::in,
+	typename traits<std::invoke_result_t<Right, typename traits<Left>::out>>::out>
+{
+public:
+	bind_with (Left left, Right right)
+		: _left(left), _right(right)
+	{ }
+
+	typename traits<std::invoke_result_t<Right, typename traits<Left>::out>>::out
+	run (typename traits<Left>::in input)
+	{
+		return std::invoke(_right, _left.run(input)).run({});
+	}
+
+private:
+	Left  _left;
+	Right _right;
+};
+
 /*! Allows reducing the output of multiple actions into one.
  */
 template <typename BinaryOp, typename Head, typename... Tail>
@@ -203,32 +223,14 @@ operator>> (Left left, Right right)
 	return { left, right };
 }
 
-template <typename... Left, typename... Right>
-bind<Right..., Left...>
-operator<< (bind<Left...> left, bind<Right...> right)
+/*! Helper to compose actions from within.
+ */
+template <typename Left, typename Right,
+	typename = std::enable_if_t<is_action<Left>::value && std::is_invocable<Right, typename traits<Left>::out>::value>>
+bind_with<Left, Right>
+operator>>= (Left left, Right right)
 {
-	return op<bind>(std::tuple_cat(right.actions(), left.actions()));
-}
-
-template <typename... Left, typename Right>
-bind<Right, Left...>
-operator<< (bind<Left...> left, Right right)
-{
-	return op<bind>(std::tuple_cat(std::make_tuple(right), left.actions()));
-}
-
-template <typename Left, typename... Right>
-bind<Right..., Left>
-operator<< (Left left, bind<Right...> right)
-{
-	return op<bind>(std::tuple_cat(right, std::make_tuple(left)));
-}
-
-template <typename Left, typename Right, typename = std::enable_if_t<is_action<Left>::value && is_action<Right>::value>>
-bind<Right, Left>
-operator<< (Left left, Right right)
-{
-	return { right, left };
+	return { left, right };
 }
 
 /*! Helper to unify action results.
