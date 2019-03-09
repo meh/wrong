@@ -145,7 +145,8 @@ public:
 		status ()
 		{
 			if (_pipe.file() != nullptr) {
-				_status = WEXITSTATUS(pclose(_pipe.file()));
+				auto status = pclose(_pipe.file());
+				_status = WEXITSTATUS(status);
 				_pipe.file(nullptr);
 			}
 
