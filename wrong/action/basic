@@ -151,9 +151,12 @@ public:
 			object.replace_extension(".o");
 			objects.push_back(object);
 
+			spdlog::info("compiling {}",
+				source.path().string().substr(std::filesystem::current_path().string().size() + 1));
+
 			auto compile = _compiler->compile(source.path(), object);
 			if (compile.status() != 0) {
-				throw "the fuck";
+				throw std::runtime_error("compilation failed");
 			}
 		}
 
