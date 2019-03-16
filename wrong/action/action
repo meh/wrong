@@ -175,6 +175,37 @@ private:
 	Callable _fun;
 };
 
+template <typename Condition, typename Then, typename Otherwise>
+class conditional : public virtual action<typename traits<Then>::in, typename traits<Then>::out>
+{
+	static_assert(std::is_same_v<typename traits<Then>::in, typename traits<Otherwise>::in>,
+		"input types do not match");
+
+	static_assert(std::is_same_v<typename traits<Then>::out, typename traits<Otherwise>::out>,
+		"output types do not match");
+
+public:
+	conditional (Condition condition, Then then, Otherwise otherwise)
+		: _condition(condition), _then(then), _otherwise(otherwise)
+	{ }
+
+	typename traits<Then>::out
+	operator() (typename traits<Then>::in input)
+	{
+		if (_condition(nothing{})) {
+			return _then(input);
+		}
+		else {
+			return _otherwise(input);
+		}
+	}
+
+private:
+	Condition _condition;
+	Then      _then;
+	Otherwise _otherwise;
+};
+
 /*! Turn a value into an action.
  */
 template <typename Value>
@@ -191,6 +222,13 @@ callable<In, Out, Callable>
 then (Callable fun)
 {
 	return { fun };
+}
+
+template <typename Condition, typename Then, typename Otherwise>
+conditional<Condition, Then, Otherwise>
+when (Condition condition, Then then, Otherwise otherwise)
+{
+	return { condition, then, otherwise };
 }
 
 } }
