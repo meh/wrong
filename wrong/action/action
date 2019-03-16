@@ -136,7 +136,7 @@ public:
 	{ }
 
 	Value
-	operator() ()
+	operator~ ()
 	{
 		return _value;
 	}
