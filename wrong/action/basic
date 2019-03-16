@@ -373,29 +373,37 @@ archive ()
 	return {};
 }
 
-class env final : public virtual action<nothing, std::optional<std::string>>
+template <typename Type = std::string>
+class getenv final : public virtual action<nothing, std::optional<Type>>
 {
 public:
-	env (std::string name)
+	getenv (std::string name)
 		: _name(name)
 	{ }
 
-	std::optional<std::string>
-	operator() (nothing _)
+	std::optional<Type>
+	operator~ ()
 	{
 		if (auto value = std::getenv(_name.c_str()); value != nullptr) {
-			return std::string(value);
+			return Type(std::move(std::string(value)));
 		}
 		else {
 			return {};
 		}
 	}
 
+	std::optional<Type>
+	operator() (nothing _)
+	{
+		return ~*this;
+	}
+
 private:
 	std::string _name;
 };
 
-class env
+template <typename Type = std::string>
+class getenv<Type>
 env (std::string name)
 {
 	return { name };
