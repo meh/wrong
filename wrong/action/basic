@@ -82,16 +82,18 @@ private:
 };
 
 template <typename Tag>
-class files : public unit<file_list<Tag>>
+class files : public virtual action<nothing, file_set<Tag>>
 {
 public:
-	using unit<file_list<Tag>>::unit;
+	files (file_list list)
+		: _list(list)
+	{ }
 
 	template <typename Matcher>
 	files<Tag>&
 	include (std::initializer_list<Matcher> filter)
 	{
-		this->_value.include(filter);
+		this->_list.include(filter);
 		return *this;
 	}
 
@@ -99,9 +101,24 @@ public:
 	files<Tag>&
 	exclude (std::initializer_list<Matcher> filter)
 	{
-		this->_value.exclude(filter);
+		this->_list.exclude(filter);
 		return *this;
 	}
+
+	file_set<Tag>
+	operator~ ()
+	{
+		return _list.filter(std::filesystem::current_path());
+	}
+
+	file_set<Tag>
+	operator() (nothing _)
+	{
+		return ~*this;
+	}
+
+private:
+	file_list _list;
 };
 
 struct assembly;
@@ -110,19 +127,19 @@ struct header;
 struct object;
 
 files<source>
-sources (file_list<source> input)
+sources (file_list input)
 {
 	return input;
 }
 
 files<header>
-headers (file_list<header> input)
+headers (file_list input)
 {
 	return input;
 }
 
 files<object>
-objects (file_list<object> input)
+objects (file_list input)
 {
 	return input;
 }
@@ -133,7 +150,7 @@ objects (file_list<object> input)
  * In this step the input files are checked to be up-to-date with the output
  * files, and compilation is skipped if not needed.
  */
-class compile final : public virtual action<file_list<source>, file_list<object>>
+class compile final : public virtual action<file_set<source>, file_set<object>>
 {
 public:
 	compile (std::shared_ptr<compiler::base> compiler)
@@ -141,20 +158,20 @@ public:
 	{ }
 
 public:
-	file_list<object>
-	operator() (file_list<source> input)
+	file_set<object>
+	operator() (file_set<source> input)
 	{
 		std::vector<std::filesystem::path> objects;
 
-		for (auto source : input.filter(std::filesystem::current_path())) {
-			auto object = source.path();
+		for (auto source : input) {
+			auto object = source;
 			object.replace_extension(".o");
 			objects.push_back(object);
 
 			spdlog::info("compiling {}",
-				source.path().string().substr(std::filesystem::current_path().string().size() + 1));
+				source.string().substr(std::filesystem::current_path().string().size() + 1));
 
-			auto compile = _compiler->compile(source.path(), object);
+			auto compile = _compiler->compile(source, object);
 			if (compile.status() != 0) {
 				throw std::runtime_error("compilation failed");
 			}
@@ -184,9 +201,9 @@ public:
 	/*! Add a path to the include paths.
 	 */
 	compile
-	include (std::initializer_list<std::string> values)
+	include (file_list list)
 	{
-		_compiler->include(values);
+		_compiler->include(list);
 		return *this;
 	}
 
@@ -241,11 +258,11 @@ compile (std::shared_ptr<Compiler> compiler = std::make_shared<Compiler>())
  *
  * This is the final linking step that produces a valid provision.
  */
-class executable final : public virtual action<file_list<object>, program>
+class executable final : public virtual action<file_set<object>, program>
 {
 public:
 	program
-	operator() (file_list<object> input)
+	operator() (file_set<object> input)
 	{
 		// TODO(meh): implement this
 		return { "" };
@@ -254,9 +271,9 @@ public:
 	/*! Add a path to the library paths.
 	 */
 	executable
-	include (std::string value)
+	include (file_list list)
 	{
-		_flags.push_back("-L" + value);
+		_include |= list;
 		return *this;
 	}
 
@@ -280,6 +297,7 @@ public:
 
 private:
 	std::vector<std::string> _flags;
+	file_list _include;
 };
 
 class executable
@@ -293,11 +311,11 @@ executable ()
  *
  * This is the final linking step that produces a valid provision.
  */
-class shared final : public virtual action<file_list<object>, library>
+class shared final : public virtual action<file_set<object>, library>
 {
 public:
 	library
-	operator() (file_list<object> input)
+	operator() (file_set<object> input)
 	{
 		// TODO(meh): implement this
 		return { false, {}, {} };
@@ -345,11 +363,11 @@ shared ()
  *
  * This is the final linking step that produces a valid provision.
  */
-class archive final : public virtual action<file_list<object>, library>
+class archive final : public virtual action<file_set<object>, library>
 {
 public:
 	library
-	operator() (file_list<object> input)
+	operator() (file_set<object> input)
 	{
 		// TODO(meh): implement this
 		return { true, {}, {} };
@@ -357,14 +375,14 @@ public:
 
 public:
 	archive
-	headers (file_list<header> value)
+	headers (file_list value)
 	{
 		_headers |= value;
 		return *this;
 	}
 
 private:
-	file_list<header> _headers;
+	file_list _headers;
 };
 
 class archive

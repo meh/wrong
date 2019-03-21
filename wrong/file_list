@@ -23,12 +23,66 @@
 #include <filesystem>
 #include <functional>
 #include <regex>
+#include <set>
 
 #include <wrong/util>
 
 namespace wrong {
 
-template <typename Tag = void>
+template <typename Tag>
+class file_set
+{
+public:
+	using iterator = std::set<std::filesystem::path>::const_iterator;
+	using const_iterator = std::set<std::filesystem::path>::const_iterator;
+
+public:
+	template <typename Input>
+	file_set (Input input)
+	{
+		using std::begin;
+		using std::end;
+
+		_set.insert(begin(input), end(input));
+	}
+
+	file_set<Tag>&
+	operator|= (file_set<Tag> const& rhs)
+	{
+		using std::begin;
+		using std::end;
+
+		_set.insert(begin(rhs), end(rhs));
+		return *this;
+	}
+
+	friend file_set<Tag>
+	operator| (file_set<Tag> lhs, file_set<Tag> const& rhs)
+	{
+		lhs |= rhs;
+		return lhs;
+	}
+
+	iterator
+	begin ()
+	{
+		using std::begin;
+
+		return begin(_set);
+	}
+
+	iterator
+	end ()
+	{
+		using std::end;
+
+		return end(_set);
+	}
+
+private:
+	std::set<std::filesystem::path> _set;
+};
+
 class file_list
 {
 public:
@@ -191,7 +245,7 @@ public:
 
 public:
 	template <typename Matcher>
-	file_list<Tag>&
+	file_list&
 	include (std::vector<Matcher> args)
 	{
 		for (auto arg : args) {
@@ -202,7 +256,7 @@ public:
 	}
 
 	template <typename Matcher>
-	file_list<Tag>&
+	file_list&
 	include (std::initializer_list<Matcher> args)
 	{
 		for (auto arg : args) {
@@ -213,7 +267,7 @@ public:
 	}
 
 	template <typename Matcher>
-	file_list<Tag>&
+	file_list&
 	exclude (std::vector<Matcher> args)
 	{
 		for (auto arg : args) {
@@ -224,7 +278,7 @@ public:
 	}
 
 	template <typename Matcher>
-	file_list<Tag>&
+	file_list&
 	exclude (std::initializer_list<Matcher> args)
 	{
 		for (auto arg : args) {
@@ -241,29 +295,29 @@ public:
 	}
 
 	template <typename Matcher>
-	file_list<Tag>&
+	file_list&
 	operator<< (Matcher matcher)
 	{
 		return include({ matcher });
 	}
 
-	file_list<Tag>&
-	operator|= (file_list<Tag> const& rhs)
+	file_list&
+	operator|= (file_list const& rhs)
 	{
 		_include.insert(_include.end(), rhs._include.begin(), rhs._include.end());
 		_exclude.insert(_exclude.end(), rhs._exclude.begin(), rhs._exclude.end());
 		return *this;
 	}
 
-	friend file_list<Tag>
-	operator| (file_list<Tag> lhs, file_list<Tag> const& rhs)
+	friend file_list
+	operator| (file_list lhs, file_list const& rhs)
 	{
 		lhs |= rhs;
 		return lhs;
 	}
 
 	template <typename Matcher>
-	file_list<Tag>&
+	file_list&
 	operator+= (std::initializer_list<Matcher> matcher)
 	{
 		include(matcher);
@@ -271,15 +325,15 @@ public:
 	}
 
 	template <typename Matcher>
-	friend file_list<Tag>
-	operator+ (file_list<Tag> lhs, std::initializer_list<Matcher> matcher)
+	friend file_list
+	operator+ (file_list lhs, std::initializer_list<Matcher> matcher)
 	{
 		lhs += matcher;
 		return lhs;
 	}
 
 	template <typename Matcher>
-	file_list<Tag>&
+	file_list&
 	operator-= (std::initializer_list<Matcher> matcher)
 	{
 		include(matcher);
@@ -287,8 +341,8 @@ public:
 	}
 
 	template <typename Matcher>
-	friend file_list<Tag>
-	operator- (file_list<Tag> lhs, std::initializer_list<Matcher> matcher)
+	friend file_list
+	operator- (file_list lhs, std::initializer_list<Matcher> matcher)
 	{
 		lhs -= matcher;
 		return lhs;
@@ -299,11 +353,22 @@ private:
 	std::vector<matcher> _exclude;
 };
 
-template <typename Tag>
-struct union_of<file_list<Tag>>
+template <>
+struct union_of<file_list>
 {
 	template <typename... Args>
-	file_list<Tag>
+	file_list
+	operator() (Args... args)
+	{
+		return (args | ...);
+	}
+};
+
+template <typename Tag>
+struct union_of<file_set<Tag>>
+{
+	template <typename... Args>
+	file_set<Tag>
 	operator() (Args... args)
 	{
 		return (args | ...);

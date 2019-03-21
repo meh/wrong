@@ -26,6 +26,7 @@
 
 #include <wrong/provision>
 #include <wrong/util>
+#include <wrong/file_list>
 
 namespace wrong { namespace action { namespace compiler {
 
@@ -109,7 +110,7 @@ public:
 
 	/*! Add a path to the include paths.
 	 */
-	virtual void include (std::initializer_list<std::string> values) = 0;
+	virtual void include (file_list list) = 0;
 
 	/*! Add a definition.
 	 */
@@ -156,6 +157,12 @@ public:
 		{
 			args.insert(args.end(), _flags.begin(), _flags.end());
 
+			for (auto dir : _include.filter(std::filesystem::current_path())) {
+				if (dir.status().type() == std::filesystem::file_type::directory) {
+					args.push_back(fmt::format("-I{}", program::quote(dir.path().string())));
+				}
+			}
+
 			if (_language.standard) {
 				args.push_back("-std=" + _language.standard.value());
 			}
@@ -188,11 +195,9 @@ public:
 	}
 
 	void
-	include (std::initializer_list<std::string> values) override
+	include (file_list list) override
 	{
-		for (auto& value : values) {
-			_flags.push_back("-I" + value);
-		}
+		_include |= list;
 	}
 
 	void
@@ -220,12 +225,10 @@ public:
 	}
 
 private:
-	language::specification _language;
+	language::specification    _language;
 	std::optional<std::string> _target;
-	std::vector<std::string> _flags;
+	std::vector<std::string>   _flags;
+	file_list                  _include;
 };
 
 } } }
-
-// TODO(meh): Remove _executable, save version for C and C++ separately, add
-// setting for root for the compiler, then stuff
