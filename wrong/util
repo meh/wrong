@@ -19,6 +19,7 @@
 #pragma once
 
 #include <iostream>
+#include <optional>
 
 #include <streambuf>
 #include <istream>
@@ -57,6 +58,17 @@ struct union_of<std::vector<T>>
 		return output;
 	}
 };
+
+template <typename T>
+T
+expect (std::optional<T> value, std::string message)
+{
+	if (!value.has_value()) {
+		throw std::runtime_error(message);
+	}
+
+	return value.value();
+}
 
 /*! Wrapper for a C stdio stream to a C++ stream.
  */
