@@ -43,6 +43,13 @@ public:
 		return _dependencies.at(name);
 	}
 
+	template <typename Action>
+	dependency::provision
+	program (std::string name, Action action)
+	{
+		return { name, action };
+	}
+
 private:
 	std::unordered_map<std::string, class dependency> _dependencies;
 };
