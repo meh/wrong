@@ -114,6 +114,20 @@ private:
 class program
 {
 public:
+	static inline
+	std::string
+	quote (std::string input)
+	{
+		// TODO(meh): Improve this, it's very fragile.
+		if (input.find_first_of("\" ;&|><") != std::string::npos) {
+			return fmt::format("'{}'", input);
+		}
+		else {
+			return input;
+		}
+	}
+
+public:
 	/*! Process instance of the program.
 	 */
 	class process : public std::streambuf

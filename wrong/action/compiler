@@ -198,19 +198,19 @@ public:
 	void
 	define (std::string name, std::string value) override
 	{
-		_flags.push_back("-D" + name + "=" + value);
+		_flags.push_back(fmt::format("-D{}={}", name, program::quote(value)));
 	}
 
 	void
 	define (std::string name) override
 	{
-		_flags.push_back("-D" + name + "=1");
+		_flags.push_back(fmt::format("-D{}=1", name));
 	}
 
 	void
 	flag (std::string name, std::string value) override
 	{
-		_flags.push_back(fmt::format("-{}={}", name, value));
+		_flags.push_back(fmt::format("-{}={}", name, program::quote(value)));
 	}
 
 	void
