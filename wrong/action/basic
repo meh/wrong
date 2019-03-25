@@ -73,7 +73,7 @@ public:
 	auto
 	operator>> (Action action)
 	{
-		change_path<typename traits<Action>::in, typename traits<Action>::out> scope(_path);
+		change_path<in_t<Action>, out_t<Action>> scope(_path);
 		return scoped(scope, action);
 	}
 

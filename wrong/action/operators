@@ -29,7 +29,7 @@ struct is_bindable : std::false_type
 
 template <typename Left, typename Right>
 struct is_bindable<Left, Right, std::enable_if_t<
-	std::is_convertible<typename traits<Left>::out, typename traits<Right>::in>::value>>
+	std::is_convertible<out_t<Left>, in_t<Right>>::value>>
 : std::true_type
 { };
 
@@ -60,7 +60,7 @@ struct is_bindable<Left, Right, std::enable_if_t<
  *   provision.
  */
 template <typename Head, typename... Tail>
-class bind final : public virtual action<typename traits<Head>::in, typename traits<nth<sizeof...(Tail) - 1, Tail...>>::out>
+class bind final : public virtual action<in_t<Head>, out_t<nth<sizeof...(Tail) - 1, Tail...>>>
 {
 	static_assert(sizeof...(Tail) >= 1, "unary bind makes no sense");
 	// TODO(meh): Figure out how to use is_bindable on Head, Tail... and assert
@@ -71,10 +71,10 @@ public:
 		: _actions({ head, tail... })
 	{ }
 
-	typename traits<nth<sizeof...(Tail) - 1, Tail...>>::out
-	operator() (typename traits<Head>::in input)
+	out_t<nth<sizeof...(Tail) - 1, Tail...>>
+	operator() (in_t<Head> input)
 	{
-		return _run<typename traits<nth<sizeof...(Tail) - 1, Tail...>>::out,
+		return _run<out_t<nth<sizeof...(Tail) - 1, Tail...>>,
 			0, Head, Tail...>(input);
 	}
 
@@ -87,14 +87,14 @@ public:
 private:
 	template <typename Out, size_t I, typename First>
 	Out
-	_run (typename traits<First>::in input)
+	_run (in_t<First> input)
 	{
 		return std::invoke(std::get<I>(_actions), input);
 	}
 
 	template <typename Out, size_t I, typename First, typename Second, typename... Rest>
 	Out
-	_run (typename traits<First>::in input)
+	_run (in_t<First> input)
 	{
 		return _run<Out, I + 1, Second, Rest...>(std::invoke(std::get<I>(_actions), input));
 	}
@@ -104,16 +104,16 @@ private:
 };
 
 template <typename Left, typename Right>
-class bind_with final : public virtual action<typename traits<Left>::in,
-	typename traits<std::invoke_result_t<Right, typename traits<Left>::out>>::out>
+class bind_with final : public virtual action<in_t<Left>,
+	out_t<std::invoke_result_t<Right, out_t<Left>>>>
 {
 public:
 	bind_with (Left left, Right right)
 		: _left(left), _right(right)
 	{ }
 
-	typename traits<std::invoke_result_t<Right, typename traits<Left>::out>>::out
-	operator() (typename traits<Left>::in input)
+	out_t<std::invoke_result_t<Right, out_t<Left>>>
+	operator() (in_t<Left> input)
 	{
 		return std::invoke(std::invoke(_right, std::invoke(_left, input)), nothing());
 	}
@@ -126,12 +126,12 @@ private:
 /*! Allows reducing the output of multiple actions into one.
  */
 template <typename BinaryOp, typename Head, typename... Tail>
-class reduction final : public virtual action<typename traits<Head>::in, typename traits<Head>::out>
+class reduction final : public virtual action<in_t<Head>, out_t<Head>>
 {
-	static_assert(is_all_true<std::is_same<typename traits<Head>::in, typename traits<Tail>::in>::value...>::value,
+	static_assert(is_all_true<std::is_same<in_t<Head>, in_t<Tail>>::value...>::value,
 		"cannot reduce actions of different input type");
 
-	static_assert(is_all_true<std::is_same<typename traits<Head>::out, typename traits<Tail>::out>::value...>::value,
+	static_assert(is_all_true<std::is_same<out_t<Head>, out_t<Tail>>::value...>::value,
 		"cannot reduce actions of different output type");
 
 public:
@@ -139,18 +139,18 @@ public:
 		: _op(op), _actions({ head, tail... })
 	{ }
 
-	typename traits<Head>::out
-	operator() (typename traits<Head>::in input)
+	out_t<Head>
+	operator() (in_t<Head> input)
 	{
 		return _run(input, std::index_sequence_for<Tail...>{});
 	}
 
 private:
 	template <size_t... I>
-	typename traits<Head>::out
-	_run (typename traits<Head>::in input, std::index_sequence<I...>)
+	out_t<Head>
+	_run (in_t<Head> input, std::index_sequence<I...>)
 	{
-		std::vector<typename traits<Head>::out> output;
+		std::vector<out_t<Head>> output;
 		output.push_back(std::invoke(std::get<0>(_actions), input));
 		(output.push_back(std::invoke(std::get<I + 1>(_actions), input)), ...);
 
@@ -164,11 +164,11 @@ private:
 };
 
 template <typename Head, typename... Tail>
-class collect final : public virtual action<typename traits<Head>::in, std::tuple<typename traits<Head>::out, typename traits<Tail>::out...>>
+class collect final : public virtual action<in_t<Head>, std::tuple<out_t<Head>, out_t<Tail>...>>
 {
 	static_assert(sizeof...(Tail) >= 1, "unary collect makes no sense");
 
-	static_assert(is_all_true<std::is_convertible<typename traits<Head>::in, typename traits<Tail>::in>::value...>::value,
+	static_assert(is_all_true<std::is_convertible<in_t<Head>, in_t<Tail>>::value...>::value,
 		"cannot collect actions of different input type");
 
 public:
@@ -176,8 +176,8 @@ public:
 		: _actions({ head, tail... })
 	{ }
 
-	std::tuple<typename traits<Head>::out, typename traits<Tail>::out...>
-	operator() (typename traits<Head>::in input)
+	std::tuple<out_t<Head>, out_t<Tail>...>
+	operator() (in_t<Head> input)
 	{
 		return _run(input, std::index_sequence_for<Head, Tail...>{});
 	}
@@ -190,8 +190,8 @@ public:
 
 private:
 	template <size_t... I>
-	std::tuple<typename traits<Head>::out, typename traits<Tail>::out...>
-	_run (typename traits<Head>::in input, std::index_sequence<I...>)
+	std::tuple<out_t<Head>, out_t<Tail>...>
+	_run (in_t<Head> input, std::index_sequence<I...>)
 	{
 		return std::make_tuple(std::invoke(std::get<I>(_actions), input)...);
 	}
@@ -239,21 +239,21 @@ operator>> (bind<Left...> left, bind<Right...> right)
 	return op<bind>(std::tuple_cat(left.actions(), right.actions()));
 }
 
-template <typename... Left, typename Right, typename = std::enable_if_t<is_action<Right>::value>>
+template <typename... Left, typename Right, typename = std::enable_if_t<is_action_v<Right>>>
 bind<Left..., Right>
 operator>> (bind<Left...> left, Right right)
 {
 	return op<bind>(std::tuple_cat(left.actions(), std::make_tuple(right)));
 }
 
-template <typename Left, typename... Right, typename = std::enable_if_t<is_action<Left>::value>>
+template <typename Left, typename... Right, typename = std::enable_if_t<is_action_v<Left>>>
 bind<Left, Right...>
 operator>> (Left left, bind<Right...> right)
 {
 	return op<bind>(std::tuple_cat(std::make_tuple(left), right.actions()));
 }
 
-template <typename Left, typename Right, typename = std::enable_if_t<is_action<Left>::value && is_action<Right>::value>>
+template <typename Left, typename Right, typename = std::enable_if_t<is_action_v<Left> && is_action_v<Right>>>
 bind<Left, Right>
 operator>> (Left left, Right right)
 {
@@ -263,7 +263,7 @@ operator>> (Left left, Right right)
 /*! Helper to compose actions from within.
  */
 template <typename Left, typename Right,
-	typename = std::enable_if_t<is_action<Left>::value && std::is_invocable<Right, typename traits<Left>::out>::value>>
+	typename = std::enable_if_t<is_action_v<Left> && std::is_invocable<Right, out_t<Left>>::value>>
 bind_with<Left, Right>
 operator>>= (Left left, Right right)
 {
@@ -276,7 +276,7 @@ template <typename BinaryOp, typename... Left, typename... Right>
 auto
 operator+ (reduction<BinaryOp, Left...> left, reduction<BinaryOp, Right...> right)
 {
-	return op<reduction>(union_of<typename traits<nth<0, Left...>>::out>(),
+	return op<reduction>(union_of<out_t<nth<0, Left...>>>(),
 		std::tuple_cat(left.actions(), right.actions()));
 }
 
@@ -284,7 +284,7 @@ template <typename... Left, typename Right>
 auto
 operator+ (reduction<Left...> left, Right right)
 {
-	return op<reduction>(union_of<typename traits<Right>::out>(),
+	return op<reduction>(union_of<out_t<Right>>(),
 		std::tuple_cat(left.actions(), std::make_tuple(right)));
 }
 
@@ -292,16 +292,16 @@ template <typename Left, typename... Right>
 auto
 operator+ (Left left, reduction<Right...> right)
 {
-	return op<reduction>(union_of<typename traits<Left>::out>(),
+	return op<reduction>(union_of<out_t<Left>>(),
 		std::tuple_cat(std::make_tuple(left), right));
 }
 
 template <typename Left, typename Right,
-	typename = std::enable_if_t<is_action<Left>::value && is_action<Right>::value>>
+	typename = std::enable_if_t<is_action_v<Left> && is_action_v<Right>>>
 auto
 operator+ (Left left, Right right)
 {
-	return op<reduction>(union_of<typename traits<Left>::out>(),
+	return op<reduction>(union_of<out_t<Left>>(),
 		std::make_tuple(left, right));
 }
 
@@ -320,7 +320,7 @@ operator, (collect<Left...> left, collect<Right...> right)
 }
 
 template <typename... Left, typename Right,
-	typename = std::enable_if_t<is_action<Right>::value>>
+	typename = std::enable_if_t<is_action_v<Right>>>
 collect<Left..., Right>
 operator, (collect<Left...> left, Right right)
 {
@@ -328,7 +328,7 @@ operator, (collect<Left...> left, Right right)
 }
 
 template <typename Left, typename... Right,
-	typename = std::enable_if_t<is_action<Left>::value>>
+	typename = std::enable_if_t<is_action_v<Left>>>
 collect<Left, Right...>
 operator, (Left left, collect<Right...> right)
 {
@@ -336,7 +336,7 @@ operator, (Left left, collect<Right...> right)
 }
 
 template <typename Left, typename Right,
-	typename = std::enable_if_t<is_action<Left>::value && is_action<Right>::value>>
+	typename = std::enable_if_t<is_action_v<Left> && is_action_v<Right>>>
 collect<Left, Right>
 operator, (Left left, Right right)
 {

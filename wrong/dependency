@@ -47,10 +47,10 @@ public:
 		provision (std::string name, Action action)
 			: _name(name)
 		{
-			struct variant : public virtual action::action<typename action::traits<Action>::out, type>
+			struct variant : public virtual action::action<action::out_t<Action>, type>
 			{
 				type
-				operator() (typename action::traits<Action>::out output)
+				operator() (action::out_t<Action> output)
 				{
 					return output;
 				}
@@ -114,7 +114,7 @@ public:
 	dependency&
 	provides (std::string name, Action action)
 	{
-		static_assert(std::is_same<typename action::traits<Action>::out, Provision>::value,
+		static_assert(std::is_same<action::out_t<Action>, Provision>::value,
 			"The action does not return the right type of provision");
 
 		provision provided(name, action);
