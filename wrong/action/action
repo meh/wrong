@@ -161,10 +161,7 @@ protected:
 	Value _value;
 };
 
-/*! Turn a function into an action.
- *
- * What this allows is to turn a normal function into an action, making it
- * usable within the rest of the system.
+/*! Turn a Callable into an action.
  */
 template <typename In, typename Out, typename Callable, typename = std::enable_if_t<
 	std::is_invocable_v<Callable, Out, In>>>
@@ -275,11 +272,11 @@ value (Value value)
 
 /*! Create an action out of any function.
  */
-template <typename In, typename Out, typename Callable>
-callable<In, Out, Callable>
+template <typename Callable>
+auto
 then (Callable fun)
 {
-	return { fun };
+	return callable{ fun };
 }
 
 template <typename Condition, typename Then, typename Otherwise>
