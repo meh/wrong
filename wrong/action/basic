@@ -89,11 +89,18 @@ public:
 		: _list(list)
 	{ }
 
+	files<Tag>&
+	only (std::set<std::filesystem::file_type> types)
+	{
+		_list.only(types);
+		return *this;
+	}
+
 	template <typename Matcher>
 	files<Tag>&
 	include (std::initializer_list<Matcher> filter)
 	{
-		this->_list.include(filter);
+		_list.include(filter);
 		return *this;
 	}
 
@@ -101,7 +108,7 @@ public:
 	files<Tag>&
 	exclude (std::initializer_list<Matcher> filter)
 	{
-		this->_list.exclude(filter);
+		_list.exclude(filter);
 		return *this;
 	}
 

@@ -48,19 +48,13 @@ public:
 	template <typename Input>
 	file_set (Input input)
 	{
-		using std::begin;
-		using std::end;
-
-		_set.insert(begin(input), end(input));
+		_set.insert(std::begin(input), std::end(input));
 	}
 
 	file_set<Tag>&
 	operator|= (file_set<Tag> const& rhs)
 	{
-		using std::begin;
-		using std::end;
-
-		_set.insert(begin(rhs), end(rhs));
+		_set.insert(rhs.cbegin(), rhs.cend());
 		return *this;
 	}
 
@@ -74,17 +68,25 @@ public:
 	iterator
 	begin ()
 	{
-		using std::begin;
-
-		return begin(_set);
+		return std::begin(_set);
 	}
 
 	iterator
 	end ()
 	{
-		using std::end;
+		return std::end(_set);
+	}
 
-		return end(_set);
+	const_iterator
+	cbegin () const
+	{
+		return std::cbegin(_set);
+	}
+
+	const_iterator
+	cend () const
+	{
+		return std::cend(_set);
 	}
 
 private:
@@ -133,15 +135,15 @@ public:
 		using iterator_category = directory_iterator::iterator_category;
 
 	public:
-		iterator (std::filesystem::path root, std::vector<matcher> const& include, std::vector<matcher> const& exclude)
-			: iterator(root, include, exclude, directory_iterator(
+		iterator (std::filesystem::path root, std::vector<matcher> const& include, std::vector<matcher> const& exclude, std::set<std::filesystem::file_type> types)
+			: iterator(root, include, exclude, types, directory_iterator(
 					root, std::filesystem::directory_options::skip_permission_denied))
 		{ }
 
-		iterator (std::filesystem::path root, std::vector<matcher> const& include, std::vector<matcher> const& exclude, directory_iterator iter)
-			: _root(root), _include(include), _exclude(exclude), _inner(iter)
+		iterator (std::filesystem::path root, std::vector<matcher> const& include, std::vector<matcher> const& exclude, std::set<std::filesystem::file_type> types, directory_iterator iter)
+			: _root(root), _include(include), _exclude(exclude), _types(types), _inner(iter)
 		{
-			find_matching();
+			next_matching();
 		}
 
 		bool
@@ -174,9 +176,15 @@ public:
 		}
 
 		void
-		find_matching ()
+		next_matching ()
 		{
-			while (_inner != std::filesystem::end(_inner) && !matches(_inner->path().lexically_relative(_root))) {
+			while (_inner != std::filesystem::end(_inner)) {
+				if (_types.empty() || _types.find(_inner->status().type()) != _types.end()) {
+					if (matches(_inner->path().lexically_relative(_root))) {
+						break;
+					}
+				}
+
 				++_inner;
 			}
 		}
@@ -184,13 +192,13 @@ public:
 		iterator
 		begin ()
 		{
-			return { _root, _include, _exclude, std::filesystem::begin(_inner) };
+			return { _root, _include, _exclude, _types, std::filesystem::begin(_inner) };
 		}
 
 		iterator
 		end ()
 		{
-			return { _root, _include, _exclude, std::filesystem::end(_inner) };
+			return { _root, _include, _exclude, _types, std::filesystem::end(_inner) };
 		}
 
 		value_type
@@ -215,7 +223,7 @@ public:
 		operator++ (int)
 		{
 			++_inner;
-			find_matching();
+			next_matching();
 			return *_inner;
 		}
 
@@ -223,7 +231,7 @@ public:
 		operator++ ()
 		{
 			++_inner;
-			find_matching();
+			next_matching();
 			return *this;
 		}
 
@@ -231,6 +239,7 @@ public:
 		std::filesystem::path       _root;
 		std::vector<matcher> const& _include;
 		std::vector<matcher> const& _exclude;
+		std::set<std::filesystem::file_type> _types;
 
 		directory_iterator _inner;
 	};
@@ -296,10 +305,17 @@ public:
 		return *this;
 	}
 
+	file_list&
+	only (std::set<std::filesystem::file_type> types)
+	{
+		_types = types;
+		return *this;
+	}
+
 	iterator
 	filter (std::filesystem::path path)
 	{
-		return { path, _include, _exclude };
+		return { path, _include, _exclude, _types };
 	}
 
 	template <typename Matcher>
@@ -359,6 +375,7 @@ public:
 private:
 	std::vector<matcher> _include;
 	std::vector<matcher> _exclude;
+	std::set<std::filesystem::file_type> _types;
 };
 
 template <>
