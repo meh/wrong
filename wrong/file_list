@@ -29,6 +29,11 @@
 
 namespace wrong {
 
+struct assembly;
+struct source;
+struct header;
+struct object;
+
 template <typename Tag>
 class file_set
 {
@@ -37,6 +42,9 @@ public:
 	using const_iterator = std::set<std::filesystem::path>::const_iterator;
 
 public:
+	file_set ()
+	{ }
+
 	template <typename Input>
 	file_set (Input input)
 	{

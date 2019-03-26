@@ -110,7 +110,7 @@ public:
 
 	/*! Add a path to the include paths.
 	 */
-	virtual void include (file_list list) = 0;
+	virtual void include (std::future<file_set<void>> list) = 0;
 
 	/*! Add a definition.
 	 */
@@ -157,10 +157,8 @@ public:
 		{
 			args.insert(args.end(), _flags.begin(), _flags.end());
 
-			for (auto dir : _include.filter(std::filesystem::current_path())) {
-				if (dir.status().type() == std::filesystem::file_type::directory) {
-					args.push_back(fmt::format("-I{}", program::quote(dir.path().string())));
-				}
+			for (auto dir : _include) {
+				args.push_back(fmt::format("-I{}", program::quote(dir.string())));
 			}
 
 			if (_language.standard) {
@@ -195,9 +193,9 @@ public:
 	}
 
 	void
-	include (file_list list) override
+	include (std::future<file_set<void>> list) override
 	{
-		_include |= list;
+		_include |= list.get();
 	}
 
 	void
@@ -228,7 +226,7 @@ private:
 	language::specification    _language;
 	std::optional<std::string> _target;
 	std::vector<std::string>   _flags;
-	file_list                  _include;
+	file_set<void>             _include;
 };
 
 } } }

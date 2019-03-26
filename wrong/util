@@ -28,15 +28,21 @@
 #include <array>
 #include <tuple>
 #include <vector>
+#include <future>
 #include <spdlog/spdlog.h>
 
 namespace wrong {
 
-template<bool...> struct bool_pack;
+template <bool...>
+struct bool_pack;
 
-template<bool... bs>
-using is_all_true = std::is_same<bool_pack<bs..., true>, bool_pack<true, bs...>>;
+/*! Check whether all values are true in the pack.
+ */
+template <bool... Bools>
+using is_all_true = std::is_same<bool_pack<Bools..., true>, bool_pack<true, Bools...>>;
 
+/*! Get the nth type in a tuple.
+ */
 template <size_t N, typename... Ts>
 using nth = typename std::tuple_element<N, std::tuple<Ts...>>::type;
 
@@ -59,6 +65,8 @@ struct union_of<std::vector<T>>
 	}
 };
 
+/*! Take the value out of an optional or raise a runtime error with a message.
+ */
 template <typename T>
 T
 expect (std::optional<T> value, std::string message)

@@ -121,13 +121,14 @@ private:
 	file_list _list;
 };
 
-struct assembly;
-struct source;
-struct header;
-struct object;
-
 files<source>
 sources (file_list input)
+{
+	return input;
+}
+
+files<void>
+paths (file_list input)
 {
 	return input;
 }
@@ -200,10 +201,11 @@ public:
 
 	/*! Add a path to the include paths.
 	 */
+	template <typename T>
 	compile
-	include (file_list list)
+	include (T include)
 	{
-		_compiler->include(list);
+		_compiler->include(into_future<T>::convert(include));
 		return *this;
 	}
 
