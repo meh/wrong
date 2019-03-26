@@ -99,16 +99,24 @@ build your stuff, and then add any other bullshit to your `Makefile` (like
 package creation, running tests, whatever).
 
 ```make
-BUILD    := $(shell mktemp -u)
-CXX      ?= clang++
-CXXFLAGS ?= -Wall -fpermissive
+CXX       ?= g++
+DEVICE    ?= EFR32MG12P433F1024GM48
+COMMANDER ?= commander
 
-build:
-	@$(CXX) -g3 -xc++ -std=c++17 -Wall -fpermissive -Iinclude ${CXXFLAGS} -o ${BUILD} Mistake -lstdc++fs
-	@${BUILD}
-	@rm -f ${BUILD}
+build: Mistake.out
+	@env DEVICE=$(DEVICE) ./Mistake.out
 
-.PHONY: build
+Mistake.out: Mistake
+	@$(CXX) -O2 -g0 -xc++ -std=c++2a -Wall -fpermissive -o Mistake.out Mistake -lstdc++fs -lpthread
+
+flash: build
+	$(COMMANDER) flash --device $(DEVICE) firmware.bin
+	
+debug: flash
+	$(COMMANDER) flash --device $(DEVICE) firmware.bin
+	$(COMMANDER) swo read --device $(DEVICE)
+
+.PHONY: build flash debug
 ```
 
 What do you mean with C/C++? Don't you know C and C++ are completely different?
