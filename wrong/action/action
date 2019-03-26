@@ -21,6 +21,7 @@
 #include <functional>
 #include <numeric>
 #include <memory>
+#include <future>
 
 namespace wrong { namespace action {
 
@@ -253,7 +254,7 @@ struct into_future<T, std::enable_if_t<std::is_member_function_pointer_v<decltyp
 };
 
 template <typename Action>
-struct into_future<Action, std::enable_if_t<is_action_v<Action>>>
+struct into_future<Action, std::enable_if_t<is_action_v<Action> && std::is_same_v<in_t<Action>, nothing>>>
 {
 	static inline
 	std::future<out_t<Action>>
