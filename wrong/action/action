@@ -213,53 +213,62 @@ private:
 	Otherwise _otherwise;
 };
 
-/*! Turn a value into a future.
- */
-template <typename T, typename = void>
-struct into_future
-{
-	static inline
-	std::future<T>
-	convert (T value)
+namespace detail {
+	/*! Turn a value into a future.
+ 	 */
+	template <typename T, typename = void>
+	struct into_future
 	{
-		std::promise<T> v;
-		v.set_value(v);
-		return v.get_future();
-	}
-};
+		static inline
+		std::future<T>
+		convert (T value)
+		{
+			std::promise<T> v;
+			v.set_value(v);
+			return v.get_future();
+		}
+	};
 
-template <typename T>
-struct into_future<std::future<T>>
-{
-	static inline
-	std::future<T>
-	convert (std::future<T> value)
+	template <typename T>
+	struct into_future<std::future<T>>
 	{
-		return value;
-	}
-};
+		static inline
+		std::future<T>
+		convert (std::future<T> value)
+		{
+			return value;
+		}
+	};
 
-template <typename T>
-struct into_future<T, std::enable_if_t<std::is_member_function_pointer_v<decltype(&T::get_future)>>>
-{
-	static inline
-	std::invoke_result_t<decltype(&T::get_future)>
-	convert (T value)
+	template <typename T>
+	struct into_future<T, std::enable_if_t<std::is_member_function_pointer_v<decltype(&T::get_future)>>>
 	{
-		return value.get_future();
-	}
-};
+		static inline
+		std::invoke_result_t<decltype(&T::get_future)>
+		convert (T value)
+		{
+			return value.get_future();
+		}
+	};
+
+	template <typename Action>
+	struct into_future<Action, std::enable_if_t<is_action_v<Action> && std::is_same_v<in_t<Action>, nothing>>>
+	{
+		static inline
+		std::future<out_t<Action>>
+		convert (Action act)
+		{
+			return std::async(std::launch::async, act, nothing{});
+		}
+	};
+}
 
 template <typename Action>
-struct into_future<Action, std::enable_if_t<is_action_v<Action> && std::is_same_v<in_t<Action>, nothing>>>
+auto
+into_future (Action act)
 {
-	static inline
-	std::future<out_t<Action>>
-	convert (Action act)
-	{
-		return std::async(std::launch::async, act, nothing{});
-	}
-};
+	return detail::into_future<Action>::convert(act);
+}
 
 /*! Turn a value into an action.
  */

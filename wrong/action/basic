@@ -212,7 +212,7 @@ public:
 	compile
 	include (T include)
 	{
-		_compiler->include(into_future<T>::convert(include));
+		_compiler->include(into_future(include));
 		return *this;
 	}
 
