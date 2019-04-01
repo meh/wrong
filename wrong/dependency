@@ -114,7 +114,7 @@ public:
 	dependency&
 	provides (std::string name, Action action)
 	{
-		static_assert(std::is_same<action::out_t<Action>, Provision>::value,
+		static_assert(std::is_same_v<action::out_t<Action>, Provision>,
 			"The action does not return the right type of provision");
 
 		provision provided(name, action);

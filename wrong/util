@@ -41,6 +41,9 @@ struct bool_pack;
 template <bool... Bools>
 using is_all_true = std::is_same<bool_pack<Bools..., true>, bool_pack<true, Bools...>>;
 
+template <bool... Bools>
+inline constexpr bool is_all_true_v = is_all_true<Bools...>::value;
+
 /*! Get the nth type in a tuple.
  */
 template <size_t N, typename... Ts>

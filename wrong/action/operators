@@ -128,10 +128,10 @@ private:
 template <typename BinaryOp, typename Head, typename... Tail>
 class reduction final : public virtual action<in_t<Head>, out_t<Head>>
 {
-	static_assert(is_all_true<std::is_same<in_t<Head>, in_t<Tail>>::value...>::value,
+	static_assert(is_all_true_v<std::is_same_v<in_t<Head>, in_t<Tail>>...>,
 		"cannot reduce actions of different input type");
 
-	static_assert(is_all_true<std::is_same<out_t<Head>, out_t<Tail>>::value...>::value,
+	static_assert(is_all_true_v<std::is_same_v<out_t<Head>, out_t<Tail>>...>,
 		"cannot reduce actions of different output type");
 
 public:
