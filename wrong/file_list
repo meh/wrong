@@ -249,9 +249,9 @@ public:
 	{ }
 
 	template <typename Matcher>
-	file_list (std::vector<Matcher> args)
+	file_list (Matcher arg)
 	{
-		include(args);
+		include({ arg });
 	}
 
 	template <typename Matcher>
@@ -260,15 +260,18 @@ public:
 		include(args);
 	}
 
+	template <typename Matcher, typename Iterator, typename = std::enable_if_t<!std::is_same_v<std::iterator_traits<Iterator>::value_type, Matcher>>>
+	file_list (Iterator args)
+	{
+		include<Matcher, Iterator>(args);
+	}
+
 public:
 	template <typename Matcher>
 	file_list&
-	include (std::vector<Matcher> args)
+	include (Matcher arg)
 	{
-		for (auto arg : args) {
-			_include.push_back(matcher(arg));
-		}
-
+		_include.push_back(matcher(arg));
 		return *this;
 	}
 
@@ -283,9 +286,28 @@ public:
 		return *this;
 	}
 
+	template <typename Matcher, typename Iterator, typename = std::enable_if_t<!std::is_same_v<std::iterator_traits<Iterator>::value_type, Matcher>>>
+	file_list&
+	include (Iterator args)
+	{
+		for (auto arg : args) {
+			_include.push_back(matcher(arg));
+		}
+
+		return *this;
+	}
+
 	template <typename Matcher>
 	file_list&
-	exclude (std::vector<Matcher> args)
+	exclude (Matcher arg)
+	{
+		_exclude.push_back(matcher(arg));
+		return *this;
+	}
+
+	template <typename Matcher>
+	file_list&
+	exclude (std::initializer_list<Matcher> args)
 	{
 		for (auto arg : args) {
 			_exclude.push_back(matcher(arg));
@@ -294,9 +316,9 @@ public:
 		return *this;
 	}
 
-	template <typename Matcher>
+	template <typename Matcher, typename Iterator, typename = std::enable_if_t<!std::is_same_v<std::iterator_traits<Iterator>::value_type, Matcher>>>
 	file_list&
-	exclude (std::initializer_list<Matcher> args)
+	exclude (Iterator args)
 	{
 		for (auto arg : args) {
 			_exclude.push_back(matcher(arg));
@@ -318,11 +340,11 @@ public:
 		return { path, _include, _exclude, _types };
 	}
 
-	template <typename Matcher>
+	template <typename... Args>
 	file_list&
-	operator<< (Matcher matcher)
+	operator<< (Args&& ...args)
 	{
-		return include({ matcher });
+		return include(std::forward<Args...>(args...));
 	}
 
 	file_list&
