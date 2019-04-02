@@ -86,6 +86,12 @@ FAQ
 Following are some questions (and answers) that I believe would be frequently
 asked if anyone knew about this project.
 
+Is it fast?
+-----------
+For some reason people seem to boast the speed of their build system as an
+important perk, but yes, this is as fast as compiling a build system for your
+specific use case.
+
 So wait, am I supposed to build my build system, to then build my project?
 --------------------------------------------------------------------------
 Exactly, it sounds insane, but it's not!
@@ -97,6 +103,9 @@ instances to build their shit (looking at you `gradle`)
 If you add a `Makefile` next to your `Mistake` you can then just run `make` to
 build your stuff, and then add any other bullshit to your `Makefile` (like
 package creation, running tests, whatever).
+
+And you get free caching of the compiled output and recompilation only when the
+`Mistake` actually changes!
 
 ```make
 CXX       ?= g++
@@ -118,11 +127,6 @@ debug: flash
 
 .PHONY: build flash debug
 ```
-
-What do you mean with C/C++? Don't you know C and C++ are completely different?
--------------------------------------------------------------------------------
-I'm aware of that, but the compilation architecture is exactly the same if we
-ignore the whole header only thingamajig going on these days in C++.
 
 Are you insane?
 ---------------
