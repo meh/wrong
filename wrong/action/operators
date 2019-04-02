@@ -203,15 +203,16 @@ private:
 };
 
 template <typename Head, typename... Tail>
-class collect final : public virtual action<in_t<Head>, std::tuple<out_t<Head>, out_t<Tail>...>>
+class concat final : public virtual action<in_t<Head>, std::tuple<out_t<Head>, out_t<Tail>...>>
 {
-	static_assert(sizeof...(Tail) >= 1, "unary collect makes no sense");
+	static_assert(sizeof...(Tail) >= 1,
+		"unary concat makes no sense");
 
 	static_assert(is_all_true<std::is_convertible<in_t<Head>, in_t<Tail>>::value...>::value,
-		"cannot collect actions of different input type");
+		"cannot concat actions of different input type");
 
 public:
-	collect (Head head, Tail... tail)
+	concat (Head head, Tail... tail)
 		: _actions({ head, tail... })
 	{ }
 
@@ -366,35 +367,34 @@ map (UnaryOp op)
 }
 
 template <typename... Left, typename... Right>
-collect<Left..., Right...>
-operator, (collect<Left...> left, collect<Right...> right)
+concat<Left..., Right...>
+operator, (concat<Left...> left, concat<Right...> right)
 {
-	return op<collect>(std::tuple_cat(left.actions(), right.actions()));
+	return op<concat>(std::tuple_cat(left.actions(), right.actions()));
 }
 
 template <typename... Left, typename Right,
 	typename = std::enable_if_t<is_action_v<Right>>>
-collect<Left..., Right>
-operator, (collect<Left...> left, Right right)
+concat<Left..., Right>
+operator, (concat<Left...> left, Right right)
 {
-	return op<collect>(std::tuple_cat(left.actions(), std::make_tuple(right)));
+	return op<concat>(std::tuple_cat(left.actions(), std::make_tuple(right)));
 }
 
 template <typename Left, typename... Right,
 	typename = std::enable_if_t<is_action_v<Left>>>
-collect<Left, Right...>
-operator, (Left left, collect<Right...> right)
+concat<Left, Right...>
+operator, (Left left, concat<Right...> right)
 {
-	return op<collect>(std::tuple_cat(std::make_tuple(left), right.actions()));
+	return op<concat>(std::tuple_cat(std::make_tuple(left), right.actions()));
 }
 
 template <typename Left, typename Right,
 	typename = std::enable_if_t<is_action_v<Left> && is_action_v<Right>>>
-collect<Left, Right>
+concat<Left, Right>
 operator, (Left left, Right right)
 {
 	return { left, right };
 }
-
 
 } }
