@@ -113,15 +113,9 @@ public:
 	}
 
 	file_set<Tag>
-	operator~ ()
-	{
-		return _list.filter(std::filesystem::current_path());
-	}
-
-	file_set<Tag>
 	operator() (nothing _)
 	{
-		return ~*this;
+		return _list.filter(std::filesystem::current_path());
 	}
 
 private:
@@ -409,7 +403,7 @@ public:
 	{ }
 
 	std::optional<Type>
-	operator~ ()
+	operator() (nothing _)
 	{
 		if (auto value = std::getenv(_name.c_str()); value != nullptr) {
 			return Type(std::move(std::string(value)));
@@ -417,12 +411,6 @@ public:
 		else {
 			return {};
 		}
-	}
-
-	std::optional<Type>
-	operator() (nothing _)
-	{
-		return ~*this;
 	}
 
 private:

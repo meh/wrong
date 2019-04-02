@@ -230,6 +230,13 @@ op (BinaryOp bop, std::tuple<Action...> actions)
 	return op<Operator>(bop, actions, std::index_sequence_for<Action...>{});
 }
 
+template <typename Action, typename = std::enable_if_t<std::is_same_v<in_t<Action>, nothing>>>
+out_t<Action>
+operator~ (Action action)
+{
+	return action({});
+}
+
 /*! Helper to compose actions.
  */
 template <typename... Left, typename... Right>
