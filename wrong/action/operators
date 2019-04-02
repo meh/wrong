@@ -123,6 +123,35 @@ private:
 	Right _right;
 };
 
+template <typename UnaryOp, typename Iterable>
+class mapper : public virtual action<Iterable, std::vector<std::invoke_result_t<UnaryOp, typename std::iterator_traits<typename Iterable::const_iterator>::value_type>>>
+{
+	using value_type = std::invoke_result_t<UnaryOp, typename std::iterator_traits<typename Iterable::const_iterator>::value_type>;
+
+public:
+	mapper (UnaryOp op)
+		: _op(op)
+	{ }
+
+	auto
+	operator() (Iterable iter)
+	{
+		std::vector<std::future<value_type>> actions;
+		for (auto value : iter) {
+			actions.push_back(into_future(_op, value));
+		}
+
+		std::vector<value_type> output;
+		std::transform(std::make_move_iterator(actions.begin()), std::make_move_iterator(actions.end()),
+			std::back_inserter(output), [](auto f) { return f.get(); });
+
+		return output;
+	}
+
+private:
+	UnaryOp _op;
+};
+
 /*! Allows reducing the output of multiple actions into one.
  */
 template <typename BinaryOp, typename Head, typename... Tail>
@@ -317,6 +346,13 @@ auto
 reduce (BinaryOp bop, Actions... actions)
 {
 	return op<reduction>(bop, std::make_tuple(actions...));
+}
+
+template <typename Iterable, typename UnaryOp>
+mapper<UnaryOp, Iterable>
+map (UnaryOp op)
+{
+	return { op };
 }
 
 template <typename... Left, typename... Right>
