@@ -171,19 +171,29 @@ public:
 	out_t<Head>
 	operator() (in_t<Head> input)
 	{
-		return _run(input, std::index_sequence_for<Tail...>{});
+		return _run(input, std::index_sequence_for<Head, Tail...>{});
+	}
+
+	std::tuple<Head, Tail...>&
+	actions ()
+	{
+		return _actions;
 	}
 
 private:
+	// TODO(meh): Implement this with std::reduce once it's implemented by
+	// compilers.
 	template <size_t... I>
 	out_t<Head>
 	_run (in_t<Head> input, std::index_sequence<I...>)
 	{
-		std::vector<out_t<Head>> output;
-		output.push_back(std::invoke(std::get<0>(_actions), input));
-		(output.push_back(std::invoke(std::get<I + 1>(_actions), input)), ...);
+		std::vector<std::future<out_t<Head>>> actions;
+		(actions.push_back(into_future(value(input) >> std::get<I>(_actions))), ...);
 
-		// TODO(meh): Implement this with std::reduce, or our own version of it.
+		std::vector<out_t<Head>> output;
+		std::transform(std::make_move_iterator(actions.begin()), std::make_move_iterator(actions.end()),
+			std::back_inserter(output), [](auto f) { return f.get(); });
+
 		return std::accumulate(output.begin() + 1, output.end(), output[0], _op);
 	}
 
