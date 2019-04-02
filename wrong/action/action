@@ -261,13 +261,32 @@ namespace detail {
 			return std::async(std::launch::async, act, nothing{});
 		}
 	};
+
+	template <typename Action>
+	struct into_future<Action, std::enable_if_t<!std::is_same_v<in_t<Action>, nothing>>>
+	{
+		template <typename In>
+		static inline
+		std::future<out_t<Action>>
+		convert (Action act, In in)
+		{
+			return std::async(std::launch::async, act, std::move(in));
+		}
+	};
 }
 
-template <typename Action>
+template <typename T>
 auto
-into_future (Action act)
+into_future (T value)
 {
-	return detail::into_future<Action>::convert(act);
+	return detail::into_future<T>::convert(value);
+}
+
+template <typename Invokable, typename... Args>
+auto
+into_future (Invokable invokable, Args&&... args)
+{
+	return detail::into_future<Invokable>::convert(invokable, std::forward<Args...>(args...));
 }
 
 /*! Turn a value into an action.
