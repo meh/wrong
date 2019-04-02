@@ -155,20 +155,21 @@ objects (file_list input)
 class compile final : public virtual action<file_set<source>, file_set<object>>
 {
 public:
-	compile (std::shared_ptr<compiler::base> compiler)
-		: _compiler(compiler)
-	{ }
-
-public:
-	file_set<object>
-	operator() (file_set<source> input)
+	/*! Compile a single source file to its object file unless the object file is
+	 * up-to-date.
+	 */
+	class one final : public virtual action<std::filesystem::path, std::filesystem::path>
 	{
-		std::vector<std::filesystem::path> objects;
+	public:
+		one (std::shared_ptr<compiler::base> compiler)
+			: _compiler(compiler)
+		{ }
 
-		for (auto source : input) {
+		std::filesystem::path
+		operator() (std::filesystem::path source)
+		{
 			auto object = source;
 			object.replace_extension(".o");
-			objects.push_back(object);
 
 			spdlog::info("compiling {}",
 				source.string().substr(std::filesystem::current_path().string().size() + 1));
@@ -177,9 +178,24 @@ public:
 			if (compile.status() != 0) {
 				throw std::runtime_error("compilation failed");
 			}
+
+			return object;
 		}
 
-		return objects;
+	private:
+		std::shared_ptr<compiler::base> _compiler;
+	};
+
+public:
+	compile (std::shared_ptr<compiler::base> compiler)
+		: _compiler(compiler)
+	{ }
+
+public:
+	file_set<object>
+	operator() (file_set<source> input)
+	{
+		return ~(value(input) >> map<decltype(input)>(one(_compiler)));
 	}
 
 	/*! Set what language to use.
