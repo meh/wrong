@@ -25,7 +25,7 @@
 #include <regex>
 #include <set>
 
-#include <wrong/util>
+#include <wrong/util/all>
 
 namespace wrong {
 

@@ -26,7 +26,7 @@
 #include <string>
 #include <filesystem>
 
-#include <wrong/util>
+#include <wrong/util/all>
 
 using namespace std::string_literals;
 

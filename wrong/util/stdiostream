@@ -31,56 +31,6 @@
 #include <future>
 #include <spdlog/spdlog.h>
 
-namespace wrong {
-
-template <bool...>
-struct bool_pack;
-
-/*! Check whether all values are true in the pack.
- */
-template <bool... Bools>
-using is_all_true = std::is_same<bool_pack<Bools..., true>, bool_pack<true, Bools...>>;
-
-template <bool... Bools>
-inline constexpr bool is_all_true_v = is_all_true<Bools...>::value;
-
-/*! Get the nth type in a tuple.
- */
-template <size_t N, typename... Ts>
-using nth = typename std::tuple_element<N, std::tuple<Ts...>>::type;
-
-template <typename Type>
-struct union_of;
-
-template <typename T>
-struct union_of<std::vector<T>>
-{
-	template <typename... Args>
-	std::vector<T>
-	operator() (Args... args)
-	{
-		std::vector<T> output;
-		(output.insert(output.end(),
-			std::make_move_iterator(args.begin()),
-			std::make_move_iterator(args.end())), ...);
-
-		return output;
-	}
-};
-
-/*! Take the value out of an optional or raise a runtime error with a message.
- */
-template <typename T>
-T
-expect (std::optional<T> value, std::string message)
-{
-	if (!value.has_value()) {
-		throw std::runtime_error(message);
-	}
-
-	return value.value();
-}
-
 /*! Wrapper for a C stdio stream to a C++ stream.
  */
 class stdiostream : public std::streambuf
@@ -182,5 +132,3 @@ public:
 		, std::istream(&this->_stream)
 	{ }
 };
-
-}

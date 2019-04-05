@@ -1,0 +1,114 @@
+/** Copyleft (ɔ) meh. - http://meh.schizofreni.co
+ *
+ * This file is part of wrong - https://github.com/meh/wrong
+ *
+ * wrong is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * wrong is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+#pragma once
+
+#include <thread>
+#include <shared_mutex>
+#include <condition_variable>
+#include <queue>
+#include <future>
+#include <vector>
+#include <functional>
+
+namespace wrong {
+
+/*! A thread pool for futures.
+ */
+class threadpool
+{
+public:
+	threadpool (size_t size = std::thread::hardware_concurrency())
+		: _working(true)
+	{
+		for (auto i = size; i > 0; i--) {
+			_workers.emplace_back([this]() { this->_loop(); });
+		}
+	}
+
+	~threadpool()
+	{
+		_working.store(false, std::memory_order_release);
+		_cond.notify_all();
+
+		for (auto& worker : _workers) {
+			worker.join();
+		}
+	}
+
+	/*! Run a callable on the thread pool.
+	 */
+	template <typename Callable, typename... Args>
+	std::future<std::invoke_result_t<std::decay_t<Callable>, std::decay_t<Args>...>>
+	run (Callable&& call, Args&&... args)
+	{
+		using return_type = std::invoke_result_t<std::decay_t<Callable>, std::decay_t<Args>...>;
+
+		auto task = std::make_shared<std::packaged_task<return_type()>>(
+			std::bind(std::forward<Callable>(call), std::forward<Args>(args)...));
+
+		std::future<return_type> future = task->get_future();
+		{
+			std::lock_guard<std::mutex> lock(_mutex);
+
+			if (!_working.load(std::memory_order_acquire)) {
+				throw std::runtime_error("the threadpool is not running");
+			}
+
+			_queue.emplace([task]() { (*task)(); });
+		}
+		_cond.notify_one();
+
+		return future;
+	}
+
+private:
+	void
+	_loop ()
+	{
+		while (true) {
+			std::function<void()> task;
+			{
+				std::unique_lock<std::mutex> lock(_mutex);
+				_cond.wait(lock);
+
+				if (!_working.load(std::memory_order_acquire)) {
+					break;
+				}
+
+				if (_queue.empty()) {
+					continue;
+				}
+
+				task = std::move(_queue.front());
+				_queue.pop();
+			}
+			task();
+		}
+	}
+
+private:
+	std::vector<std::thread> _workers;
+	std::atomic_bool _working;
+
+	std::mutex _mutex;
+	std::condition_variable _cond;
+	std::queue<std::function<void()>> _queue;
+};
+
+}

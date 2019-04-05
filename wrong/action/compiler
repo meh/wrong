@@ -25,7 +25,7 @@
 #include <stdexcept>
 
 #include <wrong/provision>
-#include <wrong/util>
+#include <wrong/util/all>
 #include <wrong/file_list>
 
 namespace wrong { namespace action { namespace compiler {

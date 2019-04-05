@@ -20,6 +20,7 @@
 
 #include <unordered_map>
 
+#include <wrong/util/all>
 #include <wrong/dependency>
 #include <wrong/action/basic>
 
@@ -30,6 +31,20 @@ namespace wrong {
 class mistake
 {
 public:
+	mistake ()
+	{ }
+
+	mistake (size_t jobs)
+		: _pool(jobs)
+	{ }
+
+public:
+	threadpool&
+	thread ()
+	{
+		return _pool;
+	}
+
 	/*! Get or define a new dependency with the given name.
 	 */
 	class dependency&
@@ -52,6 +67,7 @@ public:
 
 private:
 	std::unordered_map<std::string, class dependency> _dependencies;
+	threadpool _pool;
 };
 
 }

@@ -18,7 +18,7 @@
 
 #pragma once
 
-#include <wrong/util>
+#include <wrong/util/all>
 #include <wrong/action/action>
 
 namespace wrong { namespace action {
