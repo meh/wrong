@@ -43,7 +43,10 @@ public:
 
 	~threadpool()
 	{
-		_working.store(false, std::memory_order_release);
+		{
+			std::unique_lock<std::mutex> lock(_mutex);
+			_working = false;
+		}
 		_cond.notify_all();
 
 		for (auto& worker : _workers) {
@@ -66,7 +69,7 @@ public:
 		{
 			std::lock_guard<std::mutex> lock(_mutex);
 
-			if (!_working.load(std::memory_order_acquire)) {
+			if (!_working) {
 				throw std::runtime_error("the threadpool is not running");
 			}
 
@@ -87,7 +90,7 @@ private:
 				std::unique_lock<std::mutex> lock(_mutex);
 				_cond.wait(lock);
 
-				if (!_working.load(std::memory_order_acquire)) {
+				if (!_working) {
 					break;
 				}
 
@@ -103,12 +106,12 @@ private:
 	}
 
 private:
-	std::vector<std::thread> _workers;
-	std::atomic_bool _working;
+	std::queue<std::function<void()>> _queue;
+	bool _working;
 
+	std::vector<std::thread> _workers;
 	std::mutex _mutex;
 	std::condition_variable _cond;
-	std::queue<std::function<void()>> _queue;
 };
 
 }
